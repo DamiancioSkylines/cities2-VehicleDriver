@@ -1,0 +1,54 @@
+﻿<Publish>
+	<!--Id must be set in order to update existed mod. it is not required for publishing mod for the first time-->
+	<ModId Value="" />
+	<!--Name of the mod to display to players-->
+	<DisplayName Value="Vehicle Driver" />
+	<!--Short description of the mod-->
+	<ShortDescription Value="Allows to drive vehicles manually" />
+	<!--Long description of the mod. Single line or multi line. Supports minimal markdown subset-->
+	<!--LongDescription Value="This is a long description" /-->
+	<LongDescription>
+## Vehicle Driver
+# Brief Usage:
+1. Load your save game and select vehicle
+2. Press Enter to take over the vehicle and drive it
+3. Use Arrows to drive, H for handbrake
+4. Press Enter to release the vehicle never ESC
+		
+Known Issues:
+- Null Reference Exception (NRE) time-bomb crash after releasing accident-involved vehicles that happen too under user control.
+- ESC key cannot be used to cancel driving; please use ENTER instead, think this causes crash atm.
+- Driving is currently restricted to a horizontal plane, due to a conflict with the OutOfControlSystem, which handles proper terrain and net collision queries but causes jitter as its fighting mod movement. Simply not finished implementation.
+
+# As designed:
+- Prevents driving involved in accident vehicle
+
+## Special Thanks
+yenyang
+krzychu124
+Cgameworld
+	</LongDescription>
+	<!--Thumbnail-->
+	<Thumbnail Value="Properties/Thumbnail.png" />
+	<!--Screenshot, can be set multiple times-->
+	<Screenshot Value="" />
+	<!--Tag, can be set multiple times-->
+	<Tag Value="Code Mod" />
+	<!--Link to the forum post where the mod can be discussed-->
+	<ForumLink Value="" />
+	<!--Version of the mod-->
+	<ModVersion Value="1.0.0" />
+	<!--Recommended version of the base game to use the mod-->
+	<GameVersion Value="1.2.*" />
+	<!--Dependency for the mod, can be set multiple times-->
+	<Dependency Id="" />
+	<!--Required DLC, can be set multiple times. Supported values are "Landmark Buildings", "San Fransisco Set", "Beach Properties", "Urban Promenades", "Modern Architecture"-->
+	<RequiredDLC Value="" />
+	<!--Change log for new version. Single line or multi line. Supports minimal markdown subset-->
+	<ChangeLog Value="Initial" />
+	<!--<ChangeLog>
+	</ChangeLog>-->
+	<!--External link, can be set multiple times. supported types are "discord", "github", "youtube", "twitch", "x", "paypal", "patreon", "buymeacoffee", "kofi", "crowdin", "gitlab", "gofundme"-->
+	<ExternalLink Type="" Url="" />
+	<ExternalLink Type="github" Url="" />
+</Publish>
