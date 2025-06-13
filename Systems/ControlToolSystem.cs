@@ -343,6 +343,9 @@ namespace VehicleDriver.Systems
 
             // Compare component lists to track changes.
             ComponentLogHelper.CompareListComponents("[ControlToolSystem] Original vs OnStopRunning,      ", this.originalComponentList, this.afterComponentList);
+
+            // Always remove mod-specific control components upon exiting control. better at the end of the changes.
+            ComponentHelper.SafeRemoveComponent<VehicleDriver.Components.EntityControlData>(this.EntityManager, this.entity);
         }
 
         /// <summary>

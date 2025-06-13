@@ -58,7 +58,7 @@ namespace VehicleDriver.Systems
         {
             if (Camera.main == null || SelectedInfoUISystem.s_CameraController == null || this.cameraUpdateSystem == null || this.setting == null)
             {
-                Mod.LOG.Warn("[CameraControlSystem.OnTakeControl] Required camera systems or settings not available.");
+                Mod.LOG.Warn("[CameraControlSystem] Required camera systems or settings not available.");
                 return;
             }
 
@@ -70,7 +70,7 @@ namespace VehicleDriver.Systems
                 // Match position to the current game camera for smooth transition
                 SelectedInfoUISystem.s_CameraController.TryMatchPosition(this.cameraUpdateSystem.activeCameraController);
                 this.cameraUpdateSystem.activeCameraController = SelectedInfoUISystem.s_CameraController;
-                Mod.LOG.Info("[CameraControlSystem.OnTakeControl] Switched to Vanilla Follow Camera.");
+                Mod.LOG.Info("[CameraControlSystem] Switched to Vanilla Follow Camera.");
             }
             else if (this.setting.ModeDropdown == Setting.CameraModeEnum.CameraCustom)
             {
@@ -81,11 +81,11 @@ namespace VehicleDriver.Systems
                 if (this.originalActiveCameraController is MonoBehaviour monoBehaviour)
                 {
                     monoBehaviour.enabled = false;
-                    Mod.LOG.Info($"[CameraControlSystem.OnTakeControl] Disabled original active camera controller: {monoBehaviour.GetType().Name}");
+                    Mod.LOG.Info($"[CameraControlSystem] Disabled original active camera controller: {monoBehaviour.GetType().Name}");
                 }
                 else
                 {
-                    Mod.LOG.Warn("[CameraControlSystem.OnTakeControl] Original active camera controller is not a MonoBehaviour or couldn't be disabled.");
+                    Mod.LOG.Warn("[CameraControlSystem] Original active camera controller is not a MonoBehaviour or couldn't be disabled.");
                 }
 
                 // Set the active camera controller to null to prevent conflicts with direct camera manipulation.
@@ -97,7 +97,7 @@ namespace VehicleDriver.Systems
                     this.cameraUpdateSystem.gamePlayController.inputEnabled = false;
                 }
 
-                Mod.LOG.Info("[CameraControlSystem.OnTakeControl] Switched to direct camera control (Custom Camera).");
+                Mod.LOG.Info("[CameraControlSystem] Switched to direct camera control (Custom Camera).");
             }
             else if (this.setting.ModeDropdown == Setting.CameraModeEnum.CameraVanillaFree)
             {
@@ -119,7 +119,7 @@ namespace VehicleDriver.Systems
                     this.cameraUpdateSystem.gamePlayController.rotation = new Vector3(45f, 0, 0); // Example angle (looking down)
                 }
 
-                Mod.LOG.Info("[CameraControlSystem.OnTakeControl] Switched to Vanilla Free Camera.");
+                Mod.LOG.Info("[CameraControlSystem] Switched to Vanilla Free Camera.");
             }
         }
 
@@ -130,7 +130,7 @@ namespace VehicleDriver.Systems
         {
             if (Camera.main == null || this.cameraUpdateSystem == null)
             {
-                Mod.LOG.Warn("[CameraControlSystem.OnExitControl] Required camera systems not available. Skipping camera restore.");
+                Mod.LOG.Warn("[CameraControlSystem] Required camera systems not available. Skipping camera restore.");
                 return;
             }
 
@@ -150,7 +150,7 @@ namespace VehicleDriver.Systems
             }
             else
             {
-                Mod.LOG.Warn($"[CameraControlSystem.OnExitControl] Controlled vehicle {this.controlledEntity.Index}:{this.controlledEntity.Version} no longer exists or has no GameTransform. Restoring camera to a default free position.");
+                Mod.LOG.Warn($"[CameraControlSystem] Controlled vehicle {this.controlledEntity.Index}:{this.controlledEntity.Version} no longer exists or has no GameTransform. Restoring camera to a default free position.");
                 finalZoom = 50f; // Default zoom
                 finalPivot = currentCameraPosition + (currentCameraRotation * new Vector3(0, 0, finalZoom)); // Pivot in front of the camera
             }
@@ -184,7 +184,7 @@ namespace VehicleDriver.Systems
                     this.cameraUpdateSystem.gamePlayController.inputEnabled = true;
                 }
 
-                Mod.LOG.Info("[CameraControlSystem.OnExitControl] Restored original camera controller.");
+                Mod.LOG.Info("[CameraControlSystem] Restored original camera controller.");
             }
 
             // Fallback for when no originalActiveCameraController was saved, or it's invalid.
@@ -205,11 +205,11 @@ namespace VehicleDriver.Systems
                     this.cameraUpdateSystem.gamePlayController.inputEnabled = true;
                 }
 
-                Mod.LOG.Info("[CameraControlSystem.OnExitControl] Restored to default gameplay camera.");
+                Mod.LOG.Info("[CameraControlSystem] Restored to default gameplay camera.");
             }
             else
             {
-                Mod.LOG.Warn("[CameraControlSystem.OnExitControl] No camera controller available to restore.");
+                Mod.LOG.Warn("[CameraControlSystem] No camera controller available to restore.");
             }
 
             this.originalActiveCameraController = null; // Clear the saved reference after restoration

@@ -52,16 +52,15 @@ namespace VehicleDriver.Helpers
             {
                 if (field.FieldType != typeof(EntityQuery))
                 {
-                    Mod.LOG.Debug($"[PatchSystemQuery] Skipping field '{field.Name}' in {typeof(TSystem).Name}: Not an EntityQuery type.");
+                    // Mod.LOG.Debug($"[PatchSystemQuery] Skipping field '{field.Name}' in {typeof(TSystem).Name}: Not an EntityQuery type.");
                     continue;
                 }
 
-                Mod.LOG.Debug($"[PatchSystemQuery] Found potential EntityQuery field: '{field.Name}' in {typeof(TSystem).Name}.");
-
+                // Mod.LOG.Debug($"[PatchSystemQuery] Found potential EntityQuery field: '{field.Name}' in {typeof(TSystem).Name}.");
                 var originalQuery = (EntityQuery)field.GetValue(system);
                 if (originalQuery.Equals(default(EntityQuery)))
                 {
-                    Mod.LOG.Debug($"[PatchSystemHelper] Skipping field '{field.Name}' in {typeof(TSystem).Name}: Query is default/uninitialized.");
+                    // Mod.LOG.Debug($"[PatchSystemHelper] Skipping field '{field.Name}' in {typeof(TSystem).Name}: Query is default/uninitialized.");
                     continue;
                 }
 
@@ -83,12 +82,12 @@ namespace VehicleDriver.Helpers
                 // patchedAnyQuery = true;
 
                 // Log new query description
-                Mod.LOG.Info($"[PatchSystemQuery] Patched {typeof(TSystem).Name} query '{field.Name}' (AFTER patch):");
-                Mod.LOG.Info($"  All: {string.Join(", ", newQueryDesc.All)}");
-                Mod.LOG.Info($"  Any: {string.Join(", ", newQueryDesc.Any)}");
-                Mod.LOG.Info($"  None: {string.Join(", ", newQueryDesc.None)}");
+                // Mod.LOG.Info($"[PatchSystemQuery] Patched {typeof(TSystem).Name} query '{field.Name}' (AFTER patch):");
+                // Mod.LOG.Info($"  All: {string.Join(", ", newQueryDesc.All)}");
+                // Mod.LOG.Info($"  Any: {string.Join(", ", newQueryDesc.Any)}");
+                // Mod.LOG.Info($"  None: {string.Join(", ", newQueryDesc.None)}");
 
-                Mod.LOG.Info($"[PatchSystemQuery] Successfully patched {typeof(TSystem).Name} query '{field.Name}' to exclude EntityControlData.");
+                // Mod.LOG.Info($"[PatchSystemQuery] Successfully patched {typeof(TSystem).Name} query '{field.Name}' to exclude EntityControlData.");
 
                 // We return here because typically a system has one main query we want to patch.
                 // If there are multiples, this logic would need to be adjusted.

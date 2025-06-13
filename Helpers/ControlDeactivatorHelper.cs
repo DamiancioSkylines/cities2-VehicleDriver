@@ -52,7 +52,7 @@ namespace VehicleDriver.Helpers
             // Restore components based on the original state of the vehicle (whether it was parked or moving).
             if (controlData.VehicleState == VehicleState.Parked)
             {
-                Mod.LOG.Info($"[ControlDeactivatorHelper.RestoreEntityComponents] Restoring originally parked state for entity {entity.Index}:{entity.Version}.");
+                // Mod.LOG.Info($"[ControlDeactivatorHelper.RestoreEntityComponents] Restoring originally parked state for entity {entity.Index}:{entity.Version}.");
                 ComponentHelper.SafeRemoveComponent<Game.Objects.Moving>(entityManager, entity);
                 switch (controlData.VehicleType)
                 {
@@ -72,8 +72,7 @@ namespace VehicleDriver.Helpers
             }
             else if (controlData.VehicleState == VehicleState.Moving)
             {
-                Mod.LOG.Info($"[ControlDeactivatorHelper.RestoreEntityComponents] Restoring originally moving state for entity {entity.Index}:{entity.Version}.");
-
+                // Mod.LOG.Info($"[ControlDeactivatorHelper.RestoreEntityComponents] Restoring originally moving state for entity {entity.Index}:{entity.Version}.");
                 if (controlData.HadCarNavigation)
                 {
                     ComponentHelper.SafeAddComponentData<Game.Vehicles.CarNavigation>(entityManager, entity);
@@ -106,7 +105,8 @@ namespace VehicleDriver.Helpers
 
                 ComponentHelper.SafeAddComponentData<Game.Common.Target>(entityManager, entity);
                 entityManager.SetComponentData(entity, new Game.Common.Target(controlData.HadTarget ? controlData.OriginalTarget : Entity.Null));
-                Mod.LOG.Info($"[ControlDeactivatorHelper.RestoreEntityComponents] Restored Target for moving entity {entity.Index}:{entity.Version} to {entityManager.GetComponentData<Game.Common.Target>(entity).m_Target.Index}:{entityManager.GetComponentData<Game.Common.Target>(entity).m_Target.Version}.");
+
+                // Mod.LOG.Info($"[ControlDeactivatorHelper.RestoreEntityComponents] Restored Target for moving entity {entity.Index}:{entity.Version} to {entityManager.GetComponentData<Game.Common.Target>(entity).m_Target.Index}:{entityManager.GetComponentData<Game.Common.Target>(entity).m_Target.Version}.");
                 if (controlData.HadSwaying)
                 {
                     ComponentHelper.SafeAddComponentData<Game.Rendering.Swaying>(entityManager, entity);
@@ -117,8 +117,6 @@ namespace VehicleDriver.Helpers
                 Mod.LOG.Warn($"[ControlDeactivatorHelper.RestoreEntityComponents] Unable to determine original vehicle state for entity {entity.Index}:{entity.Version} (VehicleState: {controlData.VehicleState}). Defaulting to basic restoration.");
             }
 
-            // Always remove mod-specific control components upon exiting control. better at the end of the changes.
-            ComponentHelper.SafeRemoveComponent<VehicleDriver.Components.EntityControlData>(entityManager, entity);
             ComponentHelper.SafeRemoveComponent<Game.Vehicles.OutOfControl>(entityManager, entity);
 
             // It gets updated in OnStopRunning in ControlToolSystem
