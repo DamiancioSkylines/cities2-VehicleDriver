@@ -8,6 +8,7 @@ namespace VehicleDriver
     // - Null Reference Exception (NRE) time-bomb crash after releasing accident-involved vehicles that happen under user control.
     // - ESC key cannot be used to cancel driving; please use ENTER instead.
     // - Driving is currently restricted to a horizontal plane, due to a conflict with the OutOfControlSystem, which handles proper terrain and net collision queries but causes jitter as its fighting mod movement. Simply not finished implementation.
+    // - When vehicle is under control original blocked lane is not updated resulting in traffic jam, when releasing the vehicle the blocked lane traffic jam form in position at release.
 
     // Warning: Removing explicit qualifiers for components may cause memory leaks, possibly due to PrefabRef interactions called at "EnterControl", also some components give ambiguous errors when explicit qualifier is missing.
     // ReSharper disable RedundantNameQualifier
@@ -262,6 +263,7 @@ namespace VehicleDriver
         {
             this.prefabSystem = World.DefaultGameObjectInjectionWorld.GetExistingSystemManaged<PrefabSystem>();
 
+            // Patching CarMoveSystem is redundant as we are always adding OutOfControl to controller vehicle which in turn excludes CarMoveSystem from running on controlled entity.
             // Patch VehicleOutOfControlSystem to prevent AI from interfering with controlled vehicles.
             // This ensures that entities with EntityControlData are not processed by the vanilla OutOfControlSystem.
             PatchSystemHelper.PatchSystemQuery<VehicleOutOfControlSystem>(
@@ -274,20 +276,6 @@ namespace VehicleDriver
                     ComponentType.ReadWrite<Game.Objects.TransformFrame>(),
                 },
                 noneTypes: new[] { ComponentType.ReadOnly<Game.Common.Deleted>(), ComponentType.ReadOnly<Game.Tools.Temp>(), ComponentType.ReadOnly<TripSource>(), ComponentType.ReadOnly<EntityControlData>() });
-
-            // Patch CarMoveSystem to prevent it from affecting the controlled vehicle.
-            // This ensures that entities with EntityControlData are not processed by the vanilla CarMoveSystem,
-            // as their movement is handled by the mod.
-            PatchSystemHelper.PatchSystemQuery<CarMoveSystem>(
-                allTypes: new[]
-                {
-                    ComponentType.ReadOnly<Game.Vehicles.Car>(),
-                    ComponentType.ReadOnly<Game.Simulation.UpdateFrame>(),
-                    ComponentType.ReadWrite<Game.Objects.Transform>(),
-                    ComponentType.ReadWrite<Game.Objects.Moving>(),
-                    ComponentType.ReadWrite<Game.Objects.TransformFrame>(),
-                },
-                noneTypes: new[] { ComponentType.ReadOnly<Game.Common.Deleted>(), ComponentType.ReadOnly<Game.Tools.Temp>(), ComponentType.ReadOnly<Game.Objects.TripSource>(), ComponentType.ReadOnly<Game.Vehicles.OutOfControl>(), ComponentType.ReadOnly<EntityControlData>() });
 
             var toggleControlAction = this.Setting.GetAction(ToggleControlEntityActionName);
             if (toggleControlAction != null)

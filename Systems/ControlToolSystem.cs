@@ -9,6 +9,7 @@ namespace VehicleDriver.Systems
     using System.Diagnostics.CodeAnalysis;
     using Game.Objects;
     using Game.Prefabs;
+    using Game.Simulation;
     using Game.Tools;
     using Unity.Collections;
     using Unity.Entities;
@@ -71,6 +72,8 @@ namespace VehicleDriver.Systems
 
         private EntityQuery tempQuery; // Used in GetAllowApply, likely for preventing tool usage on temporary entities.
         private State state;
+
+        private SimulationSystem simulationSystem; // Added for checking pause state
 
         /// <summary>
         /// Represents the various operational states of the control tool system.
@@ -282,6 +285,9 @@ namespace VehicleDriver.Systems
 
             // Initialize tempQuery to get temporary entities, often used to prevent interaction with them.
             this.tempQuery = this.GetEntityQuery(ComponentType.ReadOnly<Game.Tools.Temp>());
+
+            // Get SimulationSystem to check for pause state
+            this.simulationSystem = this.World.GetOrCreateSystemManaged<SimulationSystem>();
         }
 
         /// <summary>
@@ -317,23 +323,8 @@ namespace VehicleDriver.Systems
         {
             base.OnStopRunning();
 
-            // If the entity still has EntityControlData, remove it as control is being stopped.
-            if (this.EntityManager.HasComponent<EntityControlData>(this.entity))
-            {
-                // Always remove our mod-specific component
-                ComponentHelper.SafeRemoveComponent<EntityControlData>(this.EntityManager, this.entity);
-
-                // Remove InterpolatedTransform of an entity if it did not have it originally.
-                // Use the instance-specific currentEntityControlData to check original state.
-                if (!this.currentEntityControlData.HadInterpolatedTransform)
-                {
-                    ComponentHelper.SafeRemoveComponent<Game.Rendering.InterpolatedTransform>(this.EntityManager, this.entity);
-                }
-            }
-            else
-            {
-                Mod.LOG.Warn($"[ControlToolSystem] Entity {this.entity.Index}:{this.entity.Index} missing EntityControlData OnStopRunning. Cannot fully restore original state.");
-            }
+            // Always remove mod-specific control components upon exiting control. better at the end of the changes.
+            ComponentHelper.SafeRemoveComponent<VehicleDriver.Components.EntityControlData>(this.EntityManager, this.entity);
 
             // Mark entity as Updated to ensure game systems process its new state after control is released.
             ComponentHelper.SafeAddComponent<Game.Common.Updated>(this.EntityManager, this.entity);
@@ -343,9 +334,6 @@ namespace VehicleDriver.Systems
 
             // Compare component lists to track changes.
             ComponentLogHelper.CompareListComponents("[ControlToolSystem] Original vs OnStopRunning,      ", this.originalComponentList, this.afterComponentList);
-
-            // Always remove mod-specific control components upon exiting control. better at the end of the changes.
-            ComponentHelper.SafeRemoveComponent<VehicleDriver.Components.EntityControlData>(this.EntityManager, this.entity);
         }
 
         /// <summary>
@@ -366,6 +354,16 @@ namespace VehicleDriver.Systems
         /// <returns>A JobHandle representing the completion of this update cycle's work.</returns>
         protected override JobHandle OnUpdate(JobHandle inputDeps)
         {
+            // If the simulation is paused, prevent driving input from being processed.
+            if (this.simulationSystem.selectedSpeed == 0.0f)
+            {
+                // Optionally, reset input analog values to prevent "sticky" input if unpaused later
+                this.gasAnalog = 0f;
+                this.revAnalog = 0f;
+                this.steerAnalog = 0f;
+                return inputDeps; // Stop further processing in this frame if paused
+            }
+
             // Allow driving planes helicopters and rockets to be controlled later TODO
             switch (this.state)
             {
