@@ -33,7 +33,7 @@ namespace VehicleDriver
 
     /// <summary>
     /// Represents the main mod class that integrates with the game via the IMod interface.
-    /// This class encapsulates the initialisation and disposal processes, as well as manages core mod functionality,
+    /// This class encapsulates the initialization and disposal processes, as well as manages core mod functionality,
     /// including input mappings, settings, and tool systems for manual vehicle control.
     /// </summary>
     [UsedImplicitly]
@@ -60,14 +60,14 @@ namespace VehicleDriver
 
         /// <summary>
         /// Provides a logging mechanism for the VehicleDriver namespace, allowing for consistent
-        /// and centralised logging of events, errors, and informational messages within the mod.
+        /// and centralized logging of events, errors, and informational messages within the mod.
         /// This logger is configured to suppress error messages from being displayed in the user interface.
         /// </summary>
         public static readonly ILog LOG = LogManager.GetLogger(nameof(VehicleDriver)).SetShowsErrorsInUI(false);
 
         /// <summary>
         /// Represents the settings configuration for the <see cref="Mod"/> class,
-        /// managing UI customisation and input keybindings.
+        /// managing UI customization and input keybindings.
         /// This field is marked as internal to allow direct access by other mod systems (e.g., <see cref="ControlToolSystem"/>)
         /// for retrieving user-defined settings, which is essential for the mod's behavior.
         /// </summary>
@@ -113,7 +113,7 @@ namespace VehicleDriver
 
         /// <summary>
         /// Called when the mod is disposed (e.g., game shutdown or mod unload).
-        /// Releases resources and performs clean-up when the mod is disposed of.
+        /// Releases resources and performs cleanup when the mod is disposed of.
         /// Unsubscribes from game events and input actions to prevent memory leaks or unintended behavior.
         /// Disables the entity input handler and attempts to gracefully release any controlled entities.
         /// </summary>
@@ -158,7 +158,7 @@ namespace VehicleDriver
             Instance = this;
             this.Setting = new Setting(this);
 
-            // Initialise systems and handlers early
+            // Initialize systems and handlers early
             this.toolSystem = World.DefaultGameObjectInjectionWorld.GetOrCreateSystemManaged<ToolSystem>();
 
             // Get the ControlToolSystem from the world as it's now a standalone system
@@ -181,7 +181,7 @@ namespace VehicleDriver
             GameManager.instance.localizationManager.AddSource("en-US", new LocaleEn(this.Setting));
             GameManager.instance.onGameLoadingComplete += this.OnGameLoadingComplete;
 
-            // Explicitly set the Setting reference on the ControlToolSystem and CameraControlSystem here, after they're initialised.
+            // Explicitly set the Setting reference on the ControlToolSystem and CameraControlSystem here, after they're initialized.
             this.controlToolSystem.Setting = this.Setting;
             this.cameraControlSystem.SetSetting(this.Setting);
 
@@ -238,7 +238,7 @@ namespace VehicleDriver
             this.toolSystem.activeTool = this.defaultToolSystem;
             this.InputHelper.Disable();
 
-            // Notify CameraControlSystem to restore original camera.
+            // Call CameraControlSystem to restore original camera.
             this.cameraControlSystem.OnExitControl();
 
             // Retrieve the EntityControlData Component to check original states.
@@ -249,6 +249,27 @@ namespace VehicleDriver
 
             // Restore components based on the original state of the vehicle (whether it was parked or moving).
             ControlDeactivatorHelper.RestoreEntityComponents(EntityManager, entity, Mod.controlData);
+
+            // 2. Clear the old path and trigger a refresh
+            // Instead of PathfindOrder, we clear the PathElement buffer.
+            // When the AI sees an empty path but has a Navigation component, it auto-requests a new path.
+            if (EntityManager.HasBuffer<Game.Pathfind.PathElement>(entity))
+            {
+                EntityManager.GetBuffer<Game.Pathfind.PathElement>(entity).Clear();
+            }
+
+            // 3. Trigger the recalculation.
+            // We use the 'Updated' flag which is a public bitmask.
+            if (EntityManager.HasComponent<Game.Pathfind.PathOwner>(entity))
+            {
+                var pathOwner = EntityManager.GetComponentData<Game.Pathfind.PathOwner>(entity);
+
+                // This bitwise OR adds the 'Updated' state to the AI's path status.
+                // The PathfindSetupSystem sees this and automatically schedules a new route.
+                pathOwner.m_State |= Game.Pathfind.PathFlags.Updated;
+
+                EntityManager.SetComponentData(entity, pathOwner);
+            }
 
             this.ExitControlCleanup(true);
         }
@@ -392,6 +413,55 @@ namespace VehicleDriver
 
             // Determine and store original entity types and states using the new helper.
             var newControlData = EntityDataHelper.DetermineEntityControlData(EntityManager, entity, this.prefabSystem);
+
+            // 1. CLEAR THE LANE OCCUPANCY (Fixes the Traffic Jam left after taking over vehicle)
+            // This removes the vehicle from the lane's 'occupied' list so traffic stops
+            // piling up behind us while we are in manual control.
+            if (EntityManager.HasComponent<Game.Vehicles.CarCurrentLane>(entity))
+            {
+                var currentLane = EntityManager.GetComponentData<Game.Vehicles.CarCurrentLane>(entity);
+                Entity laneEntity = currentLane.m_Lane;
+
+                // The game tracks traffic via a DynamicBuffer of LaneObject on the lane entity
+                if (EntityManager.HasBuffer<Game.Net.LaneObject>(laneEntity))
+                {
+                    var laneObjects = EntityManager.GetBuffer<Game.Net.LaneObject>(laneEntity);
+                    for (int i = 0; i < laneObjects.Length; i++)
+                    {
+                        // Check if THIS vehicle is the one blocking the lane in the buffer
+                        if (laneObjects[i].m_LaneObject == entity)
+                        {
+                            laneObjects.RemoveAt(i);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // 2. PHYSICAL HAZARD FLAG (Prevents Rear-End Collisions)
+            // Since we removed the road block above, AI cars might try to drive 'through' us.
+            // Setting CarFlags.Warning triggers the AI's proximity sensors to treat us
+            // as a hazard/obstacle, forcing them to brake before hitting our rear end.
+            if (EntityManager.HasComponent<Game.Vehicles.Car>(entity))
+            {
+                var car = EntityManager.GetComponentData<Game.Vehicles.Car>(entity);
+                car.m_Flags |= Game.Vehicles.CarFlags.Warning;
+                EntityManager.SetComponentData(entity, car);
+            }
+
+            // 3. Prevent AI fighting movement
+            // We remove these so the AI doesn't fight your movement,
+            // but ControlActivatorHelper saves them so they can be restored later!
+            EntityManager.RemoveComponent<Game.Vehicles.CarCurrentLane>(entity);
+            EntityManager.RemoveComponent<Game.Vehicles.CarNavigation>(entity);
+
+            // 4. PREPARE FOR RELEASE (The Optional "Return to Task" Idea)
+            // We want to clear the old path so when you release, the AI starts fresh
+            // from your new location rather than trying to drive back to where you took over.
+            if (EntityManager.HasBuffer<Game.Pathfind.PathElement>(entity))
+            {
+                EntityManager.GetBuffer<Game.Pathfind.PathElement>(entity).Clear();
+            }
 
             // Assign the newly created struct to savedControlData
             this.savedControlData = newControlData;

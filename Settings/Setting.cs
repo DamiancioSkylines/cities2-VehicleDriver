@@ -47,7 +47,7 @@ namespace VehicleDriver.Settings
     [SettingsUIKeyboardAction(Mod.ButtonRespawnActionName, usages: new[] { "Gameplay", "VehicleControl" })]
     public class Setting : ModSetting
     {
-        // "internal" prevents making new implied options in a mod menu when something calls this; we are using ones from InputHelper class
+        // "internal" prevents making new implied options in a mod menu when something calls this; mod is  using ones from InputHelper class
         // internal float GasBrake { get; set; }
         // internal float Steering { get; set; }
         // internal bool Handbrake { get; set; }
