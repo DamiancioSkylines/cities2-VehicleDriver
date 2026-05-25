@@ -14,7 +14,7 @@ namespace VehicleDriver.Systems
     using VehicleDriver.Settings;
 
     /// <summary>
-    /// A system responsible for managing camera behavior during manual vehicle control.
+    /// A system responsible for managing camera behaviour during manual vehicle control.
     /// This includes setting custom camera positions, rotations, and restoring original camera states.
     /// </summary>
     public partial class CameraControlSystem : GameSystemBase
@@ -227,7 +227,7 @@ namespace VehicleDriver.Systems
         }
 
         /// <summary>
-        /// Called when the system is destroyed. Performs cleanup.
+        /// Called when the system is destroyed. Performs clean-up.
         /// </summary>
         protected override void OnDestroy()
         {
