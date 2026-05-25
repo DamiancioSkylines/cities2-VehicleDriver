@@ -221,6 +221,8 @@ namespace VehicleDriver.Settings
         /// Sets a value indicating whether it gets or sets a value that, when set, triggers the reset of all key bindings to their default values.
         /// </summary>
         [SettingsUISection(MainControlsTab, MainControlsGroup)]
+
+        // ReSharper disable once ValueParameterNotUsed
         public bool ResetBindings { set => this.ResetKeyBindings();  }
 
         /// <summary>
@@ -367,6 +369,8 @@ namespace VehicleDriver.Settings
         /// </summary>
         // Settings for car behaviour
         [SettingsUISection(CarBehaviourTab, CarBehaviourGroup)]
+
+        // ReSharper disable once ValueParameterNotUsed
         public bool ResetCarBehaviour { set => this.ResetCarBehaviourSettings(); }
 
         /// <summary>
@@ -541,6 +545,8 @@ namespace VehicleDriver.Settings
         /// Sets a value indicating whether it gets or sets a value that, when set, triggers the reset of camera mode settings to their default values.
         /// </summary>
         [SettingsUISection(CameraTab, CameraGroup)]
+
+        // ReSharper disable once ValueParameterNotUsed
         public bool ResetCameraMode { set => this.ResetCameraModeSettings(); }
 
         /// <summary>
@@ -555,6 +561,8 @@ namespace VehicleDriver.Settings
         /// </summary>
         [SettingsUIHideByCondition(typeof(Setting), nameof(HideCustomCameraSettings))]
         [SettingsUISection(CameraTab, CustomCameraGroup)]
+
+        // ReSharper disable once ValueParameterNotUsed
         public bool ResetCustomCamera { set => this.ResetCustomCameraSettings(); }
 
         /// <summary>
