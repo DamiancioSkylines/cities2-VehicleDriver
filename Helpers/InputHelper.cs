@@ -74,13 +74,13 @@ namespace VehicleDriver.Helpers
         }
 
         /// <summary>
-        /// Gets the current normalised value for gas/brake input.
+        /// Gets the current normalized value for gas/brake input.
         /// Positive for gas, negative for brake. Publicly accessible for reading by jobs.
         /// </summary>
         public float GasBrake { get; private set; }
 
         /// <summary>
-        /// Gets the current normalised value for steering input.
+        /// Gets the current normalized value for steering input.
         /// Negative for the left, positive for the right. Publicly accessible for reading by jobs.
         /// </summary>
         public float Steering { get; private set; }
