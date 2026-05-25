@@ -244,7 +244,7 @@ namespace VehicleDriver
             // Retrieve the EntityControlData Component to check original states.
             if (!EntityManager.HasComponent<EntityControlData>(entity))
             {
-                LOG.Warn($"[ExitControl] Vehicle {entity.Index}:{entity.Index} missing EntityControlData on release. Cannot fully restore original state.");
+                LOG.Warn($"[ExitControl] Vehicle {entity.Index}:{entity.Version} missing EntityControlData on release. Cannot fully restore original state.");
             }
 
             // Restore components based on the original state of the vehicle (whether it was parked or moving).
