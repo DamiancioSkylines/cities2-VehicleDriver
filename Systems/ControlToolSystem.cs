@@ -100,7 +100,7 @@ namespace VehicleDriver.Systems
             /// </summary>
             /// <remarks>
             /// This state indicates that the user has initiated manual vehicle operation,
-            /// enabling direct control over the vehicle's navigation and behavior.
+            /// enabling direct control over the vehicle's navigation and behaviour.
             /// The <see cref="State.Driving"/> state is typically active when the player
             /// assumes direct control for precise maneuvering or specific gameplay scenarios.
             /// </remarks>
@@ -240,7 +240,7 @@ namespace VehicleDriver.Systems
         /// Transitions the control tool system to the walking state.
         /// Sets the tool's state to <see cref="State.Walking"/> to indicate that the controlled entity
         /// is intended to behave as if it is walking within the game.
-        /// This modifies the internal state to reflect the walking behavior mode.
+        /// This modifies the internal state to reflect the walking behaviour mode.
         /// </summary>
         public void SetWalkingState()
         {
@@ -250,7 +250,7 @@ namespace VehicleDriver.Systems
         /// <summary>
         /// Sets the control tool system's state to the "Flying" state.
         /// Updates the internal state of the tool system to represent the flying mode,
-        /// which may alter the behavior or functionality of the vehicle control system.
+        /// which may alter the behaviour or functionality of the vehicle control system.
         /// This method directly modifies the state to ensure the appropriate conditions
         /// for flying mode are established.
         /// </summary>
@@ -261,7 +261,7 @@ namespace VehicleDriver.Systems
 
         /// <summary>
         /// Resets the tool system's state to the default configuration.
-        /// Ensures the system is returned to its initial or neutral state for consistent behavior.
+        /// Ensures the system is returned to its initial or neutral state for consistent behaviour.
         /// </summary>
         public void SetDefaultState()
         {
@@ -357,7 +357,7 @@ namespace VehicleDriver.Systems
             // If the simulation is paused, prevent driving input from being processed.
             if (this.simulationSystem.selectedSpeed == 0.0f)
             {
-                // Optionally, reset input analog values to prevent "sticky" input if unpaused later
+                // Optionally, reset input analogue values to prevent "sticky" input if unpaused later
                 this.gasAnalog = 0f;
                 this.revAnalog = 0f;
                 this.steerAnalog = 0f;
@@ -401,7 +401,7 @@ namespace VehicleDriver.Systems
             if (!this.EntityManager.Exists(this.entity))
             {
                 Mod.LOG.Info($"[ControlToolSystem] OnUpdate: Target entity {this.entity.Index}:{this.entity.Version} no longer exists. Exiting.");
-                Mod.Instance.ExitControlCleanup(false); // Trigger cleanup as entity is gone.
+                Mod.Instance.ExitControlCleanup(false); // Trigger clean-up as entity is gone.
                 return inputDeps;
             }
 
@@ -440,7 +440,7 @@ namespace VehicleDriver.Systems
             // Calculate forward speed.
             var fwdSpeed = math.dot(currentMoving.m_Velocity, math.mul(currentTransform.m_Rotation, new float3(0, 0, 1)));
 
-            // Reset analog ramp values if the car is stopped and no input is given.
+            // Reset analogue ramp values if the car is stopped and no input is given.
             if (math.abs(fwdSpeed) < 0.1f && math.abs(rawGasBrake) < 0.01f)
             {
                 this.gasAnalog = 0f;
@@ -451,11 +451,11 @@ namespace VehicleDriver.Systems
             var rawGas = math.max(0f, rawGasBrake);
             var rawBrakeRev = math.min(0f, rawGasBrake);
 
-            // Smooth the gas and reverse inputs using analog ramp speeds from settings.
+            // Smooth the gas and reverse inputs using analogue ramp speeds from settings.
             this.gasAnalog = math.lerp(this.gasAnalog, rawGas, dt * (rawGas > 0.01f ? this.Setting.AnalogRampUpSpeed : this.Setting.AnalogRampDownSpeed));
             this.revAnalog = math.lerp(this.revAnalog, rawBrakeRev, dt * (rawBrakeRev < -0.01f ? this.Setting.AnalogRampUpSpeed : this.Setting.AnalogRampDownSpeed));
 
-            // Smooth the steering input using dedicated analog ramp speeds.
+            // Smooth the steering input using dedicated analogue ramp speeds.
             this.steerAnalog = math.lerp(this.steerAnalog, rawSteer, dt * (math.abs(rawSteer) > 0.01f ? this.Setting.AnalogSteerRampUpSpeed : this.Setting.AnalogSteerRampDownSpeed));
 
             // Determine the effective gas/brake/reverse value based on current speed and input.
@@ -467,7 +467,7 @@ namespace VehicleDriver.Systems
             else if (rawGasBrake < 0)
             {
                 // If the vehicle is moving forward (forward speed > 0.1f), the input is interpreted as braking.
-                // Otherwise (if stopped or moving backward), the input is used for reverse acceleration, applying an analog ramp-up/down effect.
+                // Otherwise (if stopped or moving backward), the input is used for reverse acceleration, applying an analogue ramp-up/down effect.
                 effGasBrake = fwdSpeed > 0.1f ? rawGasBrake : this.revAnalog;
             }
             else
