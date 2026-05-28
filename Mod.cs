@@ -204,7 +204,7 @@ namespace VehicleDriver
         /// <param name="success">True if exiting driving mode was successful, false otherwise.</param>
         internal void ExitControlCleanup(bool success)
         {
-            this.toolSystem.activeTool = this.defaultToolSystem;
+            // this.toolSystem.activeTool = this.defaultToolSystem;
             this.savedControlledEntity = Entity.Null;
 
             if (success)
@@ -235,7 +235,7 @@ namespace VehicleDriver
                 return;
             }
 
-            // Switch back to the DefaultToolSystem and disable mod input.
+            // Disable mod input, and reset the ControlSystem state.
             this.controlSystem.SetDefaultState();
 
             // this.toolSystem.activeTool = this.defaultToolSystem;
@@ -426,14 +426,23 @@ namespace VehicleDriver
         private void TakeControl()
         {
             // Capture the currently selected entity before any clearing actions
+            // Try to get the entity from the vanilla tool system
             var entity = this.toolSystem.selected;
+
+            // If null, fallback to check if SceneExplorer has an entity selected
+            if (entity == Entity.Null)
+            {
+                entity = GetSceneExplorerSelectedEntity();
+            }
+
+            // 3. If still null, abort
             if (entity == Entity.Null)
             {
                 return;
             }
 
             // Validate entity: Must exist, be a Car, and not be destroyed or already involved in an accident.
-            if (entity == Entity.Null || !EntityManager.Exists(entity) || !EntityManager.HasComponent<Game.Vehicles.Car>(entity) || EntityManager.HasComponent<Game.Common.Destroyed>(entity) || EntityManager.HasComponent<Game.Events.InvolvedInAccident>(entity))
+            if (entity == Entity.Null || !EntityManager.Exists(entity) || !EntityManager.HasComponent<Game.Vehicles.Vehicle>(entity) || EntityManager.HasComponent<Game.Common.Destroyed>(entity) || EntityManager.HasComponent<Game.Events.InvolvedInAccident>(entity))
             {
                 LOG.Info("[TakeControl] Blocked, entity is invalid or destroyed or not a car, or already in an accident.");
                 return;
@@ -523,10 +532,44 @@ namespace VehicleDriver
             this.cameraControlSystem.SetControlledEntity(entity);
             this.cameraControlSystem.OnTakeControl();
 
-            // Switch the current tool to ControlSystem and enable input.
+            // Enable ControlSystem and enable input.
             this.controlSystem.SetTarget(entity);
             this.controlSystem.SetDrivingState();
             this.InputHelper.Enable();
+        }
+
+        /// <summary>
+        /// Uses reflection to softly grab the selected entity from SceneExplorer without a hard dependency.
+        /// </summary>
+        private Entity GetSceneExplorerSelectedEntity()
+        {
+            try
+            {
+                // Get the SceneExplorer tool system type
+                Type sceneExplorerType = Type.GetType("SceneExplorer.System.InspectObjectToolSystem, SceneExplorer");
+                if (sceneExplorerType != null)
+                {
+                    // Try to find the system in the world
+                    var system = World.DefaultGameObjectInjectionWorld.GetExistingSystemManaged(sceneExplorerType);
+
+                    // If the system exists AND it is currently the active tool
+                    if (system != null && this.toolSystem.activeTool.GetType() == sceneExplorerType)
+                    {
+                        // Grab the value of the public 'Selected' field
+                        var selectedField = sceneExplorerType.GetField("Selected");
+                        if (selectedField != null)
+                        {
+                            return (Entity)selectedField.GetValue(system);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LOG.Warn($"[TakeControl] Failed to check SceneExplorer selection: {ex.Message}");
+            }
+
+            return Entity.Null;
         }
     }
 }
