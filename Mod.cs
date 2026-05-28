@@ -6,9 +6,6 @@ namespace VehicleDriver
 {
     // Known Issues:
     // - Null Reference Exception (NRE) time-bomb crash after releasing accident-involved vehicles that happen under user control.
-    // - ESC key cannot be used to cancel driving; please use ENTER instead.
-    // - Driving is currently restricted to a horizontal plane, due to a conflict with the OutOfControlSystem, which handles proper terrain and net collision queries but causes jitter as its fighting mod movement. Simply not finished implementation.
-    // - When vehicle is under control original blocked lane is not updated resulting in traffic jam, when releasing the vehicle the blocked lane traffic jam form in position at release.
 
     // Warning: Removing explicit qualifiers for components may cause memory leaks, possibly due to PrefabRef interactions called at "EnterControl", also some components give ambiguous errors when explicit qualifier is missing.
     // ReSharper disable RedundantNameQualifier
@@ -18,10 +15,8 @@ namespace VehicleDriver
     using Game;
     using Game.Input;
     using Game.Modding;
-    using Game.Objects;
     using Game.Prefabs;
     using Game.SceneFlow;
-    using Game.Simulation;
     using Game.Tools;
     using JetBrains.Annotations;
     using Unity.Entities;
@@ -95,7 +90,6 @@ namespace VehicleDriver
         private static EntityControlData controlData;
 
         private ToolSystem toolSystem;
-        private DefaultToolSystem defaultToolSystem;
         private ControlSystem controlSystem;
         private PrefabSystem prefabSystem;
         private CameraControlSystem cameraControlSystem;
@@ -165,7 +159,6 @@ namespace VehicleDriver
 
             // Get the ControlSystem from the world as it's now a standalone system
             this.controlSystem = World.DefaultGameObjectInjectionWorld.GetOrCreateSystemManaged<ControlSystem>();
-            this.defaultToolSystem = World.DefaultGameObjectInjectionWorld.GetOrCreateSystemManaged<DefaultToolSystem>();
             this.cameraControlSystem = World.DefaultGameObjectInjectionWorld.GetOrCreateSystemManaged<CameraControlSystem>();
 
             this.InputHelper = new InputHelper();
@@ -187,7 +180,7 @@ namespace VehicleDriver
             this.controlSystem.Setting = this.Setting;
             this.cameraControlSystem.Setting = this.Setting;
 
-            // Ensure ControlSystem updates after GameSimulation phase poossibly fixing wheel animation
+            // Ensure ControlSystem updates after GameSimulation phase possibly fixing wheel animation
             updateSystem.UpdateAfter<ControlSystem>(SystemUpdatePhase.GameSimulation);
 
             // Ensure CameraControlSystem updates after LateUpdate
@@ -266,7 +259,7 @@ namespace VehicleDriver
             // stale slots in the 4-frame TransformFrame interpolation buffer could read (0,0,0).
             // This forces all 4 tracking frames to snapshot our exact final coordinates, ensuring
             // the simulation anchors the path here instead of directing the car to the centre of the world.
-            // which also causes the vehicle to disaper or get deleted if its far enough
+            // which also causes the vehicle to disappear or get deleted if its far enough
             if (EntityManager.HasComponent<Game.Objects.Transform>(entity))
             {
                 // Fetch the exact final placement transform and moving components safely
@@ -432,13 +425,13 @@ namespace VehicleDriver
             // If null, fallback to check if SceneExplorer has an entity selected
             if (entity == Entity.Null)
             {
-                entity = GetSceneExplorerSelectedEntity();
-            }
+                entity = this.GetSceneExplorerSelectedEntity();
 
-            // 3. If still null, abort
-            if (entity == Entity.Null)
-            {
-                return;
+                // 3. If still null, abort
+                if (entity == Entity.Null)
+                {
+                    return;
+                }
             }
 
             // Validate entity: Must exist, be a Car, and not be destroyed or already involved in an accident.

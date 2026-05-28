@@ -12,7 +12,6 @@ namespace VehicleDriver.Systems
     using Game.Simulation;
     using Game.Tools;
     using Unity.Entities;
-    using Unity.Jobs;
     using Unity.Mathematics;
     using VehicleDriver.Components;
     using VehicleDriver.Enums;
@@ -70,7 +69,7 @@ namespace VehicleDriver.Systems
 
         /// <summary>
         /// Represents the various operational states of the control tool system.
-        /// Only Driving and Default are currently implemented.
+        /// Only DrivingControl and Default are currently implemented.
         /// </summary>
         /// <remarks>
         /// The <c>State</c> enum is used to define the current operational mode of the
@@ -89,7 +88,7 @@ namespace VehicleDriver.Systems
             Default,
 
             /// <summary>
-            /// Represents the state of manually driving a vehicle within the control tool system.
+            /// Represents the state of manually driving a vehicle within the control system.
             /// </summary>
             /// <remarks>
             /// This state indicates that the user has initiated manual vehicle operation,
@@ -100,15 +99,6 @@ namespace VehicleDriver.Systems
             Driving,
 
             /// <summary>
-            /// Represents the state in which the system enables movement on foot.
-            /// </summary>
-            /// <remarks>
-            /// The <c>Walking</c> state is used when the system transitions to pedestrian movement,
-            /// allowing entities to navigate or operate in walking mode.
-            /// </remarks>
-            Walking,
-
-            /// <summary>
             /// Represents the operational state where the vehicle is in flight mode.
             /// </summary>
             /// <remarks>
@@ -117,6 +107,37 @@ namespace VehicleDriver.Systems
             /// are engaged and managed by the control system.
             /// </remarks>
             Flying,
+
+            /// <summary>
+            /// Represents the state of manually driving a vehicle within the control  system.
+            /// </summary>
+            /// <remarks>
+            /// This state indicates that the user has initiated manual vehicle operation,
+            /// enabling direct control over the vehicle's navigation and behaviour.
+            /// The <see cref="State.Tracked"/> state is typically active when the player
+            /// assumes direct control for trains or trams.
+            /// </remarks>
+            Tracked,    // Rail vehicles (Trains, Trams, Subways)
+
+            /// <summary>
+            /// Represents the state of manually driving a vehicle within the control  system.
+            /// </summary>
+            /// <remarks>
+            /// This state indicates that the user has initiated manual vehicle operation,
+            /// enabling direct control over the vehicle's navigation and behaviour.
+            /// The <see cref="State.Waterborne"/> state is typically active when the player
+            /// assumes direct control for Ships, Ferries, Cargo vessels
+            /// </remarks>
+            Waterborne,
+
+            /// <summary>
+            /// Represents the state in which the system enables movement on foot.
+            /// </summary>
+            /// <remarks>
+            /// The <see cref="State.Walking"/> state is used when the system transitions to pedestrian movement,
+            /// allowing entities to navigate or operate in walking mode.
+            /// </remarks>
+            Walking,
         }
 
         /// <summary>
@@ -333,29 +354,6 @@ namespace VehicleDriver.Systems
                 return; // Stop further processing in this frame if paused
             }
 
-            // Allow driving planes helicopters and rockets to be controlled later TODO
-            switch (this.CurrentState)
-            {
-                case State.Default:
-                    break;
-                case State.Driving:
-                    // JobHandle jobHandle = this.Drive(inputDeps);
-                    this.Driving();
-                    return;
-
-                    // case State.Walking: // Not yet implemented
-                    // case State.Flying: // Not yet implemented
-            }
-
-            this.Dependency = inputDeps;
-        }
-
-        /// <summary>
-        /// Implements the core driving logic, applying player input to the controlled entity's physics.
-        /// This method calculates forces and updates the entity's position, rotation, and velocity based on input and physics settings.
-        /// </summary>
-        protected void Driving()
-        {
             if (this.entity == Entity.Null)
             {
                 return;
@@ -384,10 +382,46 @@ namespace VehicleDriver.Systems
             ComponentHelper.SafeAddComponent<Transform>(this.EntityManager, this.entity);
             ComponentHelper.SafeAddComponent<Moving>(this.EntityManager, this.entity);
 
-            // Get current transform and moving components.
+            // Get current transform and moving components data.
             var currentMoving = this.EntityManager.GetComponentData<Moving>(this.entity);
             var currentTransform = this.EntityManager.GetComponentData<Transform>(this.entity);
 
+            // Allow driving planes trains, helicopters and rockets to be controlled later TODO
+            switch (this.CurrentState)
+            {
+                case State.Default:
+                    break;
+                case State.Driving:
+                    this.DrivingControl(ref currentMoving, ref currentTransform);
+                    return;
+                case State.Tracked:
+                    // this.TrackedControl(ref currentMoving, ref currentTransform);
+                    return;
+                case State.Waterborne:
+                    // this.WaterborneControl(ref currentMoving, ref currentTransform);
+                    return;
+                case State.Flying:
+                    // this.FlyingControl(ref currentMoving, ref currentTransform);
+                    return;
+                case State.Walking:
+                    // this.WalkingControl(ref currentMoving, ref currentTransform);
+                    return;
+                default:
+                    this.DrivingControl(ref currentMoving, ref currentTransform);
+                    return;
+            }
+
+            this.Dependency = inputDeps;
+        }
+
+        /// <summary>
+        /// Implements the core driving logic, applying player input to the controlled entity's physics.
+        /// This method calculates forces and updates the entity's position, rotation, and velocity based on input and physics settings.
+        /// </summary>
+        /// <param name="currentMoving">A reference to the entity's <see cref="Game.Objects.Moving"/> component data containing velocity vectors.</param>
+        /// <param name="currentTransform">A reference to the entity's <see cref="Game.Objects.Transform"/> component data containing position and rotation quaternion.</param>
+        protected void DrivingControl(ref Game.Objects.Moving currentMoving, ref Game.Objects.Transform currentTransform)
+        {
             // Delta time for frame-rate independent calculations.
             var deltaTime = SystemAPI.Time.DeltaTime;
 
@@ -577,273 +611,110 @@ namespace VehicleDriver.Systems
             // Set updated components back to the entity
             this.EntityManager.SetComponentData(this.entity, currentTransform);
             this.EntityManager.SetComponentData(this.entity, currentMoving);
-
-            // Mark entity as Updated to ensure game systems process this change.
-            // ComponentHelper.SafeAddComponent<Game.Common.Updated>(this.EntityManager, this.entity);
         }
 
         /// <summary>
-        /// Implements the core driving logic, applying player input to the controlled entity's physics.
-        /// This method calculates forces and updates the entity's position, rotation, and velocity based on input and physics settings.
-        /// It also handles camera control.
+        /// Implements 3-dimensional navigation, allowing height control modifications.
         /// </summary>
-        /// <param name="inputDeps">The JobHandle representing input dependencies.</param>
-        /// <returns>A JobHandle representing the completion of this update cycle's work.</returns>
-        private JobHandle Drive(JobHandle inputDeps)
+        /// <param name="currentMoving">A reference to the entity's <see cref="Game.Objects.Moving"/> component data containing velocity vectors.</param>
+        /// <param name="currentTransform">A reference to the entity's <see cref="Game.Objects.Transform"/> component data containing position and rotation quaternion.</param>
+        protected void FlyingControl(ref Game.Objects.Moving currentMoving, ref Game.Objects.Transform currentTransform)
         {
-            // Exit if target entity is null or no longer exists.
-            if (this.entity == Entity.Null)
-            {
-                Mod.LOG.Info("[ControlSystem] Drive: Target entity is NULL. Exiting.");
-                return inputDeps;
-            }
+            // TODO: Map pitch up/down overrides to gas analog or custom keybinds.
 
-            if (!this.EntityManager.Exists(this.entity))
-            {
-                Mod.LOG.Info($"[ControlSystem] OnUpdate: Target entity {this.entity.Index}:{this.entity.Version} no longer exists. Exiting.");
-                Mod.Instance.ExitControlCleanup(false); // Trigger clean-up as entity is gone.
-                return inputDeps;
-            }
-
-            // Ensure settings are available. Fallback to Mod.Instance.Setting if not set.
-            if (this.Setting == null)
-            {
-                Mod.LOG.Warn("[ControlSystem] OnUpdate: Setting is NULL. This should not happen if initialized correctly. Attempting to get from Mod.Instance.");
-                this.Setting = Mod.Instance?.Setting;
-                if (this.Setting == null)
-                {
-                    Mod.LOG.Critical("[ControlSystem] OnUpdate: Setting is still NULL after fallback attempt. Cannot apply movement. Exiting update.");
-                    return inputDeps;
-                }
-            }
-
-            // Get current transform and moving components.
-            var currentMoving = this.EntityManager.GetComponentData<Game.Objects.Moving>(this.entity);
-            var currentTransform = this.EntityManager.GetComponentData<Game.Objects.Transform>(this.entity);
-
-            var newMoving = currentMoving; // Work with a copy for modifications
-            var newTransform = currentTransform; // Work with a copy for modifications
-
-            if (Mod.Instance == null)
-            {
-                return inputDeps;
-            }
-
-            var dt = SystemAPI.Time.DeltaTime; // Delta time for frame-rate independent calculations.
+            /*
+            // Delta time for frame-rate independent calculations.
+            var deltaTime = SystemAPI.Time.DeltaTime;
 
             // Get raw input values from the InputHelper.
-            var inputHandler = Mod.Instance.InputHelper; // Access Mod.Instance.inputHelper (now internal)
+            // Read the current RAW digital state of the axis inputs (0, 1, or -1)
+            var inputHandler = Mod.Instance.InputHelper;
             var rawGasBrake = inputHandler.GasBrakeAction.ReadValue<float>();
             var rawSteer = inputHandler.SteerAction.ReadValue<float>();
             var handbrakeActive = inputHandler.HandbrakeAction.IsPressed();
+            */
 
-            // Calculate forward speed.
-            var fwdSpeed = math.dot(currentMoving.m_Velocity, math.mul(currentTransform.m_Rotation, new float3(0, 0, 1)));
+            // Set updated components back to the entity
+            this.EntityManager.SetComponentData(this.entity, currentTransform);
+            this.EntityManager.SetComponentData(this.entity, currentMoving);
+        }
 
-            // Reset analogue ramp values if the car is stopped and no input is given.
-            if (math.abs(fwdSpeed) < 0.1f && math.abs(rawGasBrake) < 0.01f)
-            {
-                this.gasAnalog = 0f;
-                this.revAnalog = 0f;
-            }
-
-            // Separate gas and brake/reverse inputs.
-            var rawGas = math.max(0f, rawGasBrake);
-            var rawBrakeRev = math.min(0f, rawGasBrake);
-
-            // Smooth the gas and reverse inputs using analogue ramp speeds from settings.
-            this.gasAnalog = math.lerp(this.gasAnalog, rawGas, dt * (rawGas > 0.01f ? this.Setting.AnalogRampUpSpeed : this.Setting.AnalogRampDownSpeed));
-            this.revAnalog = math.lerp(this.revAnalog, rawBrakeRev, dt * (rawBrakeRev < -0.01f ? this.Setting.AnalogRampUpSpeed : this.Setting.AnalogRampDownSpeed));
-
-            // Smooth the steering input using dedicated analogue ramp speeds.
-            this.steerAnalog = math.lerp(this.steerAnalog, rawSteer, dt * (math.abs(rawSteer) > 0.01f ? this.Setting.AnalogSteerRampUpSpeed : this.Setting.AnalogSteerRampDownSpeed));
-
-            // Determine the effective gas/brake/reverse value based on current speed and input.
-            float effGasBrake;
-            if (rawGasBrake > 0)
-            {
-                effGasBrake = this.gasAnalog;
-            }
-            else if (rawGasBrake < 0)
-            {
-                // If the vehicle is moving forward (forward speed > 0.1f), the input is interpreted as braking.
-                // Otherwise (if stopped or moving backward), the input is used for reverse acceleration, applying an analogue ramp-up/down effect.
-                effGasBrake = fwdSpeed > 0.1f ? rawGasBrake : this.revAnalog;
-            }
-            else
-            {
-                effGasBrake = 0f; // No input
-            }
-
-            // If handbrake is active, force effective input to be non-positive for braking/sliding.
-            if (handbrakeActive)
-            {
-                effGasBrake = math.min(effGasBrake, 0f);
-            }
-
-            // Get current forward and right directions from the car's rotation.
-            var forward = math.mul(newTransform.m_Rotation, new float3(0, 0, 1));
-            var right = math.mul(newTransform.m_Rotation, new float3(1, 0, 0));
-
-            // Calculate lateral speed.
-            var latSpeed = math.dot(newMoving.m_Velocity, right);
-
-            // Friction Factors (Unified Grip System) based on settings.
-            var baseLongFriction = this.Setting.OverallGrip;
-            var baseLatFriction = this.Setting.OverallGrip;
-
-            var effLongFriction = baseLongFriction;
-            var effLatFriction = baseLatFriction;
-
-            // Apply Handbrake Logic: reduces lateral and longitudinal friction.
-            if (handbrakeActive)
-            {
-                effLatFriction *= this.Setting.HandbrakeSlideFactor;
-                effLongFriction *= this.Setting.HandbrakeBrakingFactor;
-
-                // Damp angular velocity and increase lateral friction at very low speeds during handbrake.
-                if (math.abs(fwdSpeed) < 1.0f)
-                {
-                    effLatFriction *= 2.0f;
-                    this.angularVelocity = math.lerp(this.angularVelocity, 0f, dt * 20f);
-                }
-
-                // Apply general braking power for handbrake deceleration.
-                fwdSpeed = math.max(0f, fwdSpeed - (this.Setting.BrakingPower * dt));
-            }
-
-            // Drifting Logic: reduces lateral friction if turning sharply and moving above activation speed.
-            var absAngVel = math.abs(this.angularVelocity);
-            var absFwdSpeed = math.abs(fwdSpeed);
-            if (absFwdSpeed > CDriftActivationSpeed && absAngVel > 0.1f)
-            {
-                effLatFriction *= 1f - this.Setting.DriftEffectiveness;
-            }
-
-            // Acceleration/Braking (scaled by effective longitudinal friction and GasSensitivity).
-            var accelSpeedFactor = math.lerp(1f, 1f, math.abs(fwdSpeed) / this.Setting.TopSpeed); // Consider adjusting this
-            var accelForce = effGasBrake * this.Setting.Acceleration * accelSpeedFactor;
-            if (effGasBrake < 0f)
-            {
-                accelForce *= this.Setting.ReversePowerMultiplier;
-            }
-
-            fwdSpeed += accelForce * dt * this.Setting.GasSensitivity * effLongFriction;
-
-            // Apply coasting or braking deceleration based on input.
-            if (effGasBrake == 0f && math.abs(fwdSpeed) > 0.1f)
-            {
-                fwdSpeed = math.lerp(fwdSpeed, 0f, dt * this.Setting.NaturalDeceleration);
-            }
-            else if (effGasBrake < 0f && fwdSpeed > 0f)
-            {
-                fwdSpeed = math.max(0f, fwdSpeed - (this.Setting.BrakingPower * dt * effLongFriction));
-            }
-            else if (effGasBrake > 0f && fwdSpeed < 0f)
-            {
-                fwdSpeed = math.min(0f, fwdSpeed + (this.Setting.BrakingPower * dt * effLongFriction));
-            }
-
-            // Clamp forward speed to limits (including reverse speed).
-            fwdSpeed = math.clamp(fwdSpeed, -10f, this.Setting.TopSpeed);
-
-            // Snap forward speed to zero if very close and no input.
-            if (math.abs(fwdSpeed) < 0.1f && effGasBrake == 0f)
-            {
-                fwdSpeed = 0f;
-            }
-
-            // Apply lateral friction to reduce sideways movement.
-            latSpeed = math.lerp(latSpeed, 0f, dt * effLatFriction);
-
-            // Clamp lateral speed.
-            latSpeed = math.clamp(latSpeed, -this.Setting.MaxLateralSpeed, this.Setting.MaxLateralSpeed);
-
-            // Apply speed loss during turning.
-            var turnSpeedLoss = math.abs(this.angularVelocity) * math.abs(fwdSpeed) * this.Setting.TurningSpeedLossFactor * dt;
-            fwdSpeed -= turnSpeedLoss;
-
-            // Steering and Angular Velocity calculations.
-            var effSteer = this.steerAnalog;
-
-            // Apply speed-sensitive steering damping.
-            var speedNorm = math.clamp(math.abs(fwdSpeed) / this.Setting.TopSpeed, 0f, 1f);
-            var speedDampFactor = math.lerp(1f, this.Setting.HighSpeedTurningDamping, speedNorm);
-
-            // Calculate damped steering sensitivity
-            var dampSteerSens = this.Setting.SteeringSensitivity * speedDampFactor;
-
-            // Calculate base steering angle.
-            var steerAngleRad = effSteer * dampSteerSens * (math.PI / 180f);
-
-            // Calculate wheelbase-dependent turning rate.
-            var wheelbaseTurnRate = 0f;
-            if (this.Setting.VehicleWheelbase > 0.01f)
-            {
-                wheelbaseTurnRate = fwdSpeed * math.sin(steerAngleRad) / this.Setting.VehicleWheelbase;
-            }
-
-            // Apply low-speed turning boost.
-            var lowSpeedBoost = math.lerp(this.Setting.LowSpeedTurningBoost, 1f, math.abs(fwdSpeed) / this.Setting.PivotTurningBlendSpeed);
-            lowSpeedBoost = math.clamp(lowSpeedBoost, 1f, this.Setting.LowSpeedTurningBoost);
-
-            var desiredAngularVelocity = wheelbaseTurnRate * lowSpeedBoost;
-
-            // Smooth and damp angular velocity.
-            this.angularVelocity = math.lerp(this.angularVelocity, desiredAngularVelocity, dt * CSteeringResponse);
-            this.angularVelocity = math.lerp(this.angularVelocity, 0f, dt * CRotationalDrag);
-
-            // Update Vehicle State: velocity and rotation.
-            newMoving.m_Velocity = (forward * fwdSpeed) + (right * latSpeed);
-            var rot = quaternion.AxisAngle(math.up(), this.angularVelocity * dt);
-            newTransform.m_Rotation = math.normalize(math.mul(newTransform.m_Rotation, rot));
-
-            // Apply velocity to position.
-            // Disabling might fix the animations
-            // newTransform.m_Position += newMoving.m_Velocity * dt;
-
-            // Set updated components back to the entity.
-            this.EntityManager.SetComponentData(this.entity, newTransform);
-            this.EntityManager.SetComponentData(this.entity, newMoving);
+        /// <summary>
+        /// Implements specialized rail navigation, binding velocity strictly to lane track pathways.
+        /// </summary>
+        /// <param name="currentMoving">A reference to the entity's <see cref="Game.Objects.Moving"/> component data containing velocity vectors.</param>
+        /// <param name="currentTransform">A reference to the entity's <see cref="Game.Objects.Transform"/> component data containing position and rotation quaternion.</param>
+        protected void TrackedControl(ref Game.Objects.Moving currentMoving, ref Game.Objects.Transform currentTransform)
+        {
+            // TODO: Pull layout components, ignore manual steering angles, map input strictly to line acceleration.
 
             /*
-            // Write the current transform to all 4 TransformFrame slots.
-            //
-            // ObjectInterpolateSystem derives wheel spin from the delta between the
-            // STORED InterpolatedTransform (computed and saved last rendering frame) and
-            // the NEWLY computed one this frame. Since we update every rendering frame,
-            // that delta equals velocity * dt — exactly the correct spin rate.
-            //
-            // Writing all 4 slots with the same data eliminates the reversed-slot artefact:
-            // CalculateUpdateFrames cycles updateFrame1 through 0→1→2→3 every ~3 frames.
-            // If [0,1]=prev and [2,3]=curr, then when updateFrame1=3 it reads frames[3]
-            // (curr) as "old" and frames[0] (prev) as "new" — reversed — causing wheels
-            // to spin backward and Swaying to see a velocity spike every ~12 frames.
-            // All-same slots means frame1 == frame2 always, so CalculateTransform returns
-            // exactly P_current, and the delta with the stored P_previous is always correct.
-            //
-            // The m_Velocity field is used by CalculateTransform's Bezier tangent, so
-            // including the real velocity preserves interpolation quality.
-            if (this.EntityManager.HasBuffer<Game.Objects.TransformFrame>(this.entity))
-            {
-                var transformFrames = this.EntityManager.GetBuffer<Game.Objects.TransformFrame>(this.entity);
+            // Delta time for frame-rate independent calculations.
+            var deltaTime = SystemAPI.Time.DeltaTime;
 
-                if (transformFrames.Length != 4)
-                {
-                    transformFrames.Resize(4, NativeArrayOptions.ClearMemory);
-                }
+            // Get raw input values from the InputHelper.
+            // Read the current RAW digital state of the axis inputs (0, 1, or -1)
+            var inputHandler = Mod.Instance.InputHelper;
+            var rawGasBrake = inputHandler.GasBrakeAction.ReadValue<float>();
+            var rawSteer = inputHandler.SteerAction.ReadValue<float>();
+            var handbrakeActive = inputHandler.HandbrakeAction.IsPressed();
+            */
 
-                var currentFrame = new Game.Objects.TransformFrame(newTransform, newMoving);
-                transformFrames[0] = currentFrame;
-                transformFrames[1] = currentFrame;
-                transformFrames[2] = currentFrame;
-                transformFrames[3] = currentFrame;
-            }*/
+            // Set updated components back to the entity
+            this.EntityManager.SetComponentData(this.entity, currentTransform);
+            this.EntityManager.SetComponentData(this.entity, currentMoving);
+        }
 
-            // Mark entity as Updated to ensure game systems process this change.
-            ComponentHelper.SafeAddComponent<Game.Common.Updated>(this.EntityManager, this.entity);
+        /// <summary>
+        /// Implements waterborne steering, introducing loose rotational momentum and high surface drag.
+        /// </summary>
+        /// <param name="currentMoving">A reference to the entity's <see cref="Game.Objects.Moving"/> component data containing velocity vectors.</param>
+        /// <param name="currentTransform">A reference to the entity's <see cref="Game.Objects.Transform"/> component data containing position and rotation quaternion.</param>
+        protected void WaterborneControl(ref Game.Objects.Moving currentMoving, ref Game.Objects.Transform currentTransform)
+        {
+            // TODO: Emulate ship sailing properties.
 
-            return inputDeps;
+            /*
+            // Delta time for frame-rate independent calculations.
+            var deltaTime = SystemAPI.Time.DeltaTime;
+
+            // Get raw input values from the InputHelper.
+            // Read the current RAW digital state of the axis inputs (0, 1, or -1)
+            var inputHandler = Mod.Instance.InputHelper;
+            var rawGasBrake = inputHandler.GasBrakeAction.ReadValue<float>();
+            var rawSteer = inputHandler.SteerAction.ReadValue<float>();
+            var handbrakeActive = inputHandler.HandbrakeAction.IsPressed();
+            */
+
+            // Set updated components back to the entity
+            this.EntityManager.SetComponentData(this.entity, currentTransform);
+            this.EntityManager.SetComponentData(this.entity, currentMoving);
+        }
+
+        /// <summary>
+        /// Implements walking navigation.
+        /// </summary>
+        /// <param name="currentMoving">A reference to the entity's <see cref="Game.Objects.Moving"/> component data containing velocity vectors.</param>
+        /// <param name="currentTransform">A reference to the entity's <see cref="Game.Objects.Transform"/> component data containing position and rotation quaternion.</param>
+        protected void WalkingControl(ref Game.Objects.Moving currentMoving, ref Game.Objects.Transform currentTransform)
+        {
+            // TODO: Map pitch up/down overrides to gas analog or custom keybinds.
+
+            /*
+            // Delta time for frame-rate independent calculations.
+            var deltaTime = SystemAPI.Time.DeltaTime;
+
+            // Get raw input values from the InputHelper.
+            // Read the current RAW digital state of the axis inputs (0, 1, or -1)
+            var inputHandler = Mod.Instance.InputHelper;
+            var rawGasBrake = inputHandler.GasBrakeAction.ReadValue<float>();
+            var rawSteer = inputHandler.SteerAction.ReadValue<float>();
+            var handbrakeActive = inputHandler.HandbrakeAction.IsPressed();
+            */
+
+            // Set updated components back to the entity
+            this.EntityManager.SetComponentData(this.entity, currentTransform);
+            this.EntityManager.SetComponentData(this.entity, currentMoving);
         }
     }
 }
