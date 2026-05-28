@@ -78,8 +78,9 @@ namespace VehicleDriver.Helpers
 
             // Mod.LOG.Info("[ControlActivatorHelper] Added InterpolatedTransform component.");
 
-            // Remove Swaying to prevent vehicle body wiggles. Will need a custom solution if desired.
-            ComponentHelper.SafeRemoveComponent<Game.Rendering.Swaying>(entityManager, entity);
+            // Ensure Swaying is present for smooth rendering.
+            // Vehicle does not bob anymore constantly due to not using JobHandle as control brain
+            ComponentHelper.SafeAddComponent<Game.Rendering.Swaying>(entityManager, entity);
 
             // Mod.LOG.Info("[ControlActivatorHelper] Removed Swaying component.");
 

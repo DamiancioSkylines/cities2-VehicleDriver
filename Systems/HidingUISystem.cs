@@ -31,7 +31,7 @@ namespace VehicleDriver.Systems
         private bool uiVisible; // Last frame's state of the UI: true if hidden, false if visible.
 
         /// <summary>
-        /// Initialises the HidingUISystem, setting up necessary dependencies and default configurations.
+        /// Initializes the HidingUISystem, setting up necessary dependencies and default configurations.
         /// </summary>
         /// <remarks>
         /// The method is called when the system is created and performs the following actions:
@@ -51,7 +51,7 @@ namespace VehicleDriver.Systems
             this.renderingSystem = World.DefaultGameObjectInjectionWorld.GetOrCreateSystemManaged<RenderingSystem>();
             this.toolRaycastSystem = World.DefaultGameObjectInjectionWorld.GetOrCreateSystemManaged<ToolRaycastSystem>();
             this.toolSystem = World.DefaultGameObjectInjectionWorld.GetOrCreateSystemManaged<ToolSystem>();
-            this.uiVisible = true; // Initialise the state as visible.
+            this.uiVisible = true; // Initialize the state as visible.
 
             var toggleControlAction = this.setting.GetAction(Mod.ToggleControlEntityActionName);
             if (toggleControlAction == null)
@@ -60,8 +60,9 @@ namespace VehicleDriver.Systems
             }
 
             toggleControlAction.shouldBeEnabled = true;
-            toggleControlAction.onInteraction -= this.ToggleUI; // Unsubscribe first to ensure only one subscription
-            toggleControlAction.onInteraction += this.ToggleUI; // Then subscribe
+
+            // toggleControlAction.onInteraction -= this.ToggleUI; // Unsubscribe first to ensure only one subscription
+            // toggleControlAction.onInteraction += this.ToggleUI; // Then subscribe
         }
 
         // Toggles the visibility of the game's UI and adjusts associated rendering and raycasting flags.
@@ -75,7 +76,7 @@ namespace VehicleDriver.Systems
             var entity = this.toolSystem.selected;
             var uiView = GameManager.instance.userInterface.view.View;
 
-            // There is a case when controlled vehicle got into accident during manual control, after a while vehicle gets deleted and we can't escape Hidden UI or mod ControlToolSystem if user did not exit the vehicle. Two Part Problem here and in Mod.cs in ExitControl class todo
+            // There is a case when controlled vehicle got into accident during manual control, after a while vehicle gets deleted and we can't escape Hidden UI or mod ControlSystem if user did not exit the vehicle. Two Part Problem here and in Mod.cs in ExitControl class todo
             if (this.uiVisible)
             {
                 // Validate entity and if the UI is visible
@@ -86,7 +87,7 @@ namespace VehicleDriver.Systems
                 }
             }
 
-            // Toggle UI visibility except the highlighted outlines over entities, this will be handled by the ControlToolSystem itself
+            // Toggle UI visibility except the highlighted outlines over entities, this will be handled by the ControlSystem itself
             if (this.uiVisible)
             {
                 // Hide the rendering overlay, which can affect things like road names and notifications.

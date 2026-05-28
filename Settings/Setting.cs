@@ -40,7 +40,7 @@ namespace VehicleDriver.Settings
     [SettingsUIKeyboardAction(Mod.ToggleControlEntityActionName, usages: new[] { "Gameplay", "VehicleControl" })]
     [SettingsUIGamepadAction(Mod.ToggleControlEntityActionName, usages: new[] { "Gameplay", "VehicleControl" })]
 
-    // Keep these as Axis actions, as the ControlToolSystem reads them as such.
+    // Keep these as Axis actions, as the ControlSystem reads them as such.
     [SettingsUIKeyboardAction(Mod.AxisGasBrakeActionName, ActionType.Axis, usages: new[] { "Gameplay", "VehicleControl" })]
     [SettingsUIKeyboardAction(Mod.AxisSteerActionName, ActionType.Axis, usages: new[] { "Gameplay", "VehicleControl" })]
     [SettingsUIKeyboardAction(Mod.ButtonHandbrakeActionName, usages: new[] { "Gameplay", "VehicleControl" })]

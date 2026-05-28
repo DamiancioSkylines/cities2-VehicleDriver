@@ -9,7 +9,7 @@ namespace VehicleDriver.Settings
 
     /// <summary>
     /// Provides English locale entries for the Vehicle Driver mod settings.
-    /// This class implements <see cref="IDictionarySource"/> to supply localised strings
+    /// This class implements <see cref="IDictionarySource"/> to supply localized strings
     /// for UI elements, tooltips, and other mod-specific text.
     /// </summary>
     public class LocaleEn : IDictionarySource
@@ -48,6 +48,10 @@ namespace VehicleDriver.Settings
             // ToggleControlEntityKey
             { this.setting.GetOptionLabelLocaleID(nameof(Setting.ToggleControlEntityKey)), "Toggle manual control" },
             { this.setting.GetOptionDescLocaleID(nameof(Setting.ToggleControlEntityKey)), "First select Vehicle and press to toggle manual control." },
+
+            // RespawnKey
+            { this.setting.GetOptionLabelLocaleID(nameof(Setting.RespawnKey)), "Respawn" },
+            { this.setting.GetOptionDescLocaleID(nameof(Setting.RespawnKey)), "Press respawn , stops movement." },
 
             // HandbrakeKey
             { this.setting.GetOptionLabelLocaleID(nameof(Setting.HandbrakeKey)), "Handbrake" },

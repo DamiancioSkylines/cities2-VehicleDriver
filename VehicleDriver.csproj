@@ -27,6 +27,10 @@
         <Reference Include="Colossal.Collections">
             <Private>false</Private>
         </Reference>
+        <Reference Include="Colossal.Mathematics">
+          <HintPath>G:\SteamLibrary\steamapps\common\Cities Skylines II\Cities2_Data\Managed\Colossal.Mathematics.dll</HintPath>
+          <Private>False</Private>
+        </Reference>
         <Reference Include="Colossal.PSI.Common">
           <Private>false</Private>
         </Reference>

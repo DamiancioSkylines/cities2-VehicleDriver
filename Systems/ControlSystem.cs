@@ -1,4 +1,4 @@
-// <copyright file="ControlToolSystem.cs" company="PlaceholderCompany">
+// <copyright file="ControlSystem.cs" company="PlaceholderCompany">
 // Copyright (c) PlaceholderCompany. All rights reserved.
 // </copyright>
 
@@ -7,11 +7,10 @@ namespace VehicleDriver.Systems
 {
     using System.Collections.Generic;
     using System.Diagnostics.CodeAnalysis;
+    using Game;
     using Game.Objects;
-    using Game.Prefabs;
     using Game.Simulation;
     using Game.Tools;
-    using Unity.Collections;
     using Unity.Entities;
     using Unity.Jobs;
     using Unity.Mathematics;
@@ -25,7 +24,7 @@ namespace VehicleDriver.Systems
     /// Inherited from <see cref="ToolBaseSystem"/> to provide a custom tool functionality
     /// tailored for driving simulation and allows easy way to hide highlight outline over entities.
     /// </summary>
-    public partial class ControlToolSystem : ToolBaseSystem
+    public partial class ControlSystem : GameSystemBase
     {
         /// <summary>
         /// Represents the settings configuration for the control tool within the vehicle driving mod.
@@ -47,11 +46,6 @@ namespace VehicleDriver.Systems
         private float revAnalog;
         private float steerAnalog;
 
-        // Fields to store previous transform and moving for InterpolatedTransformFrame interpolation.
-        private Game.Objects.Transform previousTransform;
-        private Moving previousMoving;
-        private bool hasPreviousFrame;
-
         private List<string> originalComponentList; // Stores components before control was taken.
         [JetBrains.Annotations.UsedImplicitly] // Marked as used implicitly to suppress warnings.
         private List<string> beforeComponentList; // Stores components when OnStartRunning is called.
@@ -71,7 +65,6 @@ namespace VehicleDriver.Systems
         private EntityControlData currentEntityControlData;
 
         private EntityQuery tempQuery; // Used in GetAllowApply, likely for preventing tool usage on temporary entities.
-        private State state;
 
         private SimulationSystem simulationSystem; // Added for checking pause state
 
@@ -127,22 +120,9 @@ namespace VehicleDriver.Systems
         }
 
         /// <summary>
-        /// Gets the unique identifier for this tool.
+        /// Gets allow public.
         /// </summary>
-        public override string toolID => "VehicleDriver.ControlTool";
-
-        /// <summary>
-        /// Retrieves the prefab associated with this tool. This tool does not use a prefab, so it returns null.
-        /// </summary>
-        /// <returns>Always returns <c>null</c>.</returns>
-        public override PrefabBase GetPrefab() => null;
-
-        /// <summary>
-        /// Attempts to set the prefab for this tool. This tool does not use prefabs, so it always returns false.
-        /// </summary>
-        /// <param name="prefab">The prefab to attempt to set.</param>
-        /// <returns>Always returns <c>false</c>.</returns>
-        public override bool TrySetPrefab(PrefabBase prefab) => false;
+        public State CurrentState { get; private set; }
 
         /// <summary>
         /// Sets the original list of components associated with a specified <paramref name="targetEntity"/>.
@@ -171,13 +151,15 @@ namespace VehicleDriver.Systems
         public void SetTarget(Entity targetEntity)
         {
             this.entity = targetEntity;
-            this.hasPreviousFrame = false;
+
+            // this.hasPreviousFrame = false;
             this.angularVelocity = 0f;
             this.gasAnalog = 0f;
             this.revAnalog = 0f;
             this.steerAnalog = 0f;
-            this.previousTransform = default;
-            this.previousMoving = default;
+
+            // this.previousTransform = default;
+            // this.previousMoving = default;
         }
 
         /// <summary>
@@ -233,7 +215,7 @@ namespace VehicleDriver.Systems
         /// </summary>
         public void SetDrivingState()
         {
-            this.state = State.Driving;
+            this.CurrentState = State.Driving;
         }
 
         /// <summary>
@@ -244,7 +226,7 @@ namespace VehicleDriver.Systems
         /// </summary>
         public void SetWalkingState()
         {
-            this.state = State.Walking;
+            this.CurrentState = State.Walking;
         }
 
         /// <summary>
@@ -256,7 +238,7 @@ namespace VehicleDriver.Systems
         /// </summary>
         public void SetFlyingState()
         {
-            this.state = State.Flying;
+            this.CurrentState = State.Flying;
         }
 
         /// <summary>
@@ -265,7 +247,7 @@ namespace VehicleDriver.Systems
         /// </summary>
         public void SetDefaultState()
         {
-            this.state = State.Default;
+            this.CurrentState = State.Default;
         }
 
         /// <summary>
@@ -274,11 +256,8 @@ namespace VehicleDriver.Systems
         protected override void OnCreate()
         {
             base.OnCreate();
-            Mod.LOG.Info("[ControlToolSystem] OnCreate: ControlToolSystem created.");
+            Mod.LOG.Info("[ControlSystem] OnCreate: ControlSystem created.");
 
-            this.hasPreviousFrame = false;
-            this.previousTransform = default;
-            this.previousMoving = default;
             this.originalComponentList = new List<string>();
             this.beforeComponentList = new List<string>();
             this.afterComponentList = new List<string>();
@@ -310,7 +289,7 @@ namespace VehicleDriver.Systems
             this.trainType = this.currentEntityControlData.TrainType;
             this.watercraftType = this.currentEntityControlData.WatercraftType;
             this.aircraftType = this.currentEntityControlData.AircraftType;
-            Mod.LOG.Info($"[ControlToolSystem] OnStartRunning: Target entity {this.entity.Index}:{this.entity.Version} EntityType: {this.entityType} VehicleState: {this.vehicleState} VehicleType: {this.vehicleType} CarType: {this.carType} CarSize: {this.carSize} TrainType: {this.trainType} WatercraftType: {this.watercraftType} AircraftType: {this.aircraftType}");
+            Mod.LOG.Info($"[ControlSystem] OnStartRunning: Target entity {this.entity.Index}:{this.entity.Version} EntityType: {this.entityType} VehicleState: {this.vehicleState} VehicleType: {this.vehicleType} CarType: {this.carType} CarSize: {this.carSize} TrainType: {this.trainType} WatercraftType: {this.watercraftType} AircraftType: {this.aircraftType}");
 
             // Capture components before any further modifications in this running cycle for comparison.
             this.beforeComponentList = ComponentLogHelper.ListComponents(this.EntityManager, this.entity);
@@ -333,27 +312,17 @@ namespace VehicleDriver.Systems
             this.afterComponentList = ComponentLogHelper.ListComponents(this.EntityManager, this.entity);
 
             // Compare component lists to track changes.
-            ComponentLogHelper.CompareListComponents("[ControlToolSystem] Original vs OnStopRunning,      ", this.originalComponentList, this.afterComponentList);
-        }
-
-        /// <summary>
-        /// Determines whether the tool can be applied.
-        /// Prevents tool application if temporary entities are found in the query.
-        /// </summary>
-        /// <returns><c>true</c> if the tool can be applied; otherwise, <c>false</c>.</returns>
-        protected override bool GetAllowApply()
-        {
-            // Prevents tool application if the tempQuery finds temporary entities.
-            return base.GetAllowApply() && !this.tempQuery.IsEmptyIgnoreFilter;
+            ComponentLogHelper.CompareListComponents("[ControlSystem] Original vs OnStopRunning,      ", this.originalComponentList, this.afterComponentList);
         }
 
         /// <summary>
         /// Called every frame to update the system. Handles different tool states and schedules the driving job.
         /// </summary>
-        /// <param name="inputDeps">The JobHandle representing input dependencies.</param>
-        /// <returns>A JobHandle representing the completion of this update cycle's work.</returns>
-        protected override JobHandle OnUpdate(JobHandle inputDeps)
+        protected override void OnUpdate() // This was not working
         {
+            // 1. Grab the current dependency handle from the system
+            var inputDeps = this.Dependency;
+
             // If the simulation is paused, prevent driving input from being processed.
             if (this.simulationSystem.selectedSpeed == 0.0f)
             {
@@ -361,25 +330,256 @@ namespace VehicleDriver.Systems
                 this.gasAnalog = 0f;
                 this.revAnalog = 0f;
                 this.steerAnalog = 0f;
-                return inputDeps; // Stop further processing in this frame if paused
+                return; // Stop further processing in this frame if paused
             }
 
             // Allow driving planes helicopters and rockets to be controlled later TODO
-            switch (this.state)
+            switch (this.CurrentState)
             {
                 case State.Default:
-                    this.applyMode = ApplyMode.None; // Do not apply tool effects (e.g., outline hiding)
                     break;
                 case State.Driving:
-                    this.applyMode = ApplyMode.Apply; // Apply tool effects (e.g., hide outlines over selected/hovered entities)
-                    JobHandle jobHandle = this.Drive(inputDeps);
-                    return jobHandle;
+                    // JobHandle jobHandle = this.Drive(inputDeps);
+                    this.Driving();
+                    return;
 
                     // case State.Walking: // Not yet implemented
                     // case State.Flying: // Not yet implemented
             }
 
-            return inputDeps;
+            this.Dependency = inputDeps;
+        }
+
+        /// <summary>
+        /// Implements the core driving logic, applying player input to the controlled entity's physics.
+        /// This method calculates forces and updates the entity's position, rotation, and velocity based on input and physics settings.
+        /// </summary>
+        protected void Driving()
+        {
+            if (this.entity == Entity.Null)
+            {
+                return;
+            }
+
+            if (!this.EntityManager.Exists(this.entity))
+            {
+                Mod.LOG.Info($"[ControlSystem] OnUpdate: Target entity {this.entity.Index}:{this.entity.Version} no longer exists. Exiting.");
+                Mod.Instance.ExitControlCleanup(false);
+                return;
+            }
+
+            if (this.Setting == null)
+            {
+                Mod.LOG.Warn("[ControlSystem] OnUpdate: m_Setting is NULL. This should not happen if initialized correctly. Attempting to get from Mod.Instance.");
+
+                this.Setting = Mod.Instance?.Setting;
+                if (this.Setting == null)
+                {
+                    Mod.LOG.Critical("[ControlSystem] OnUpdate: m_Setting is still NULL after fallback attempt. Cannot apply movement. Exiting update.");
+                    return; // Prevent NRE
+                }
+            }
+
+            // Ensure the target vehicle has a GameTransform and Moving component for position and velocity.
+            ComponentHelper.SafeAddComponent<Transform>(this.EntityManager, this.entity);
+            ComponentHelper.SafeAddComponent<Moving>(this.EntityManager, this.entity);
+
+            // Get current transform and moving components.
+            var currentMoving = this.EntityManager.GetComponentData<Moving>(this.entity);
+            var currentTransform = this.EntityManager.GetComponentData<Transform>(this.entity);
+
+            // Delta time for frame-rate independent calculations.
+            var deltaTime = SystemAPI.Time.DeltaTime;
+
+            // Get raw input values from the InputHelper.
+            // Read the current RAW digital state of the axis inputs (0, 1, or -1)
+            var inputHandler = Mod.Instance.InputHelper;
+            var rawGasBrake = inputHandler.GasBrakeAction.ReadValue<float>();
+            var rawSteer = inputHandler.SteerAction.ReadValue<float>();
+            var handbrakeActive = inputHandler.HandbrakeAction.IsPressed();
+
+            // Calculate forward speed.
+            var fwdSpeed = math.dot(currentMoving.m_Velocity, math.mul(currentTransform.m_Rotation, new float3(0, 0, 1)));
+
+            // Reset analogue ramp values if the car is stopped and no input is given.
+            if (math.abs(fwdSpeed) < 0.1f && math.abs(rawGasBrake) < 0.01f)
+            {
+                this.gasAnalog = 0f;
+                this.revAnalog = 0f;
+            }
+
+            // Separate raw gas and raw brake/reverse inputs
+            // Only positive part for gas
+            // Only negative part for brake/reverse
+            var rawGas = math.max(0f, rawGasBrake);
+            var rawBrakeRev = math.min(0f, rawGasBrake);
+
+            // Smooth the gas input
+            this.gasAnalog = math.lerp(this.gasAnalog, rawGas, deltaTime * (rawGas > 0.01f ? this.Setting.AnalogRampUpSpeed : this.Setting.AnalogRampDownSpeed));
+
+            // Smooth the reverse input
+            this.revAnalog = math.lerp(this.revAnalog, rawBrakeRev, deltaTime * (rawBrakeRev < -0.01f ? this.Setting.AnalogRampUpSpeed : this.Setting.AnalogRampDownSpeed));
+
+            // Smooth the steering input using new dedicated settings
+            this.steerAnalog = math.lerp(this.steerAnalog, rawSteer, deltaTime * (math.abs(rawSteer) > 0.01f ? this.Setting.AnalogSteerRampUpSpeed : this.Setting.AnalogSteerRampDownSpeed));
+
+            // Determine the effective gas/brake/reverse value to use
+            float effGasBrake;
+
+            if (rawGasBrake > 0)
+            {
+                // User is pressing gas (always analogue)
+                effGasBrake = this.gasAnalog;
+            }
+            else if (rawGasBrake < 0)
+            {
+                // User is pressing brake/reverse
+                // If the vehicle is moving forward (forward speed > 0.1f), the input is interpreted as braking.
+                // Otherwise (if stopped or moving backward), the input is used for reverse acceleration, applying an analogue ramp-up/down effect.
+                effGasBrake = fwdSpeed > 0.1f ? rawGasBrake : this.revAnalog;
+            }
+            else
+            {
+                // No gas/brake input
+                effGasBrake = 0f;
+            }
+
+            // If handbrake is active, force effective input to be non-positive for braking/sliding.
+            if (handbrakeActive)
+            {
+                effGasBrake = math.min(effGasBrake, 0f);
+            }
+
+            // Current forward and right directions of the car derived from its rotation quaternion
+            var forward = math.mul(currentTransform.m_Rotation, new float3(0, 0, 1));
+            var right = math.mul(currentTransform.m_Rotation, new float3(1, 0, 0));
+
+            // Calculate lateral speed.
+            var latSpeed = math.dot(currentMoving.m_Velocity, right);
+
+            // Friction Factors (Unified Grip System) based on settings.
+            var baseLongFriction = this.Setting.OverallGrip;
+            var baseLatFriction = this.Setting.OverallGrip;
+
+            var effLongFriction = baseLongFriction;
+            var effLatFriction = baseLatFriction;
+
+            // Apply Handbrake Logic: reduces lateral and longitudinal friction.
+            if (handbrakeActive)
+            {
+                // When handbrake is active, lateral friction is significantly reduced to simulate locked wheels.
+                effLatFriction *= this.Setting.HandbrakeSlideFactor;
+
+                // Significantly reduce longitudinal friction during handbrake to simulate loss of traction
+                effLongFriction *= this.Setting.HandbrakeBrakingFactor;
+
+                // Damp angular velocity and increase lateral friction at very low speeds during handbrake.
+                // Simply Reduce excessive spinning at low speeds with handbrake
+                if (math.abs(fwdSpeed) < 1.0f)
+                {
+                    effLatFriction *= 2.0f;
+                    this.angularVelocity = math.lerp(this.angularVelocity, 0f, deltaTime * 20f);
+                }
+
+                // Apply general braking power for handbrake deceleration
+                fwdSpeed = math.max(0f, fwdSpeed - (this.Setting.BrakingPower * deltaTime));
+            }
+
+            // Drifting Logic: reduces lateral friction if turning sharply and moving above activation speed.
+            var absAngVel = math.abs(this.angularVelocity);
+            var absFwdSpeed = math.abs(fwdSpeed);
+            if (absFwdSpeed > CDriftActivationSpeed && absAngVel > 0.1f)
+            {
+                // Invert DriftEffectiveness: higher setting value means more drift (less grip)
+                effLatFriction *= 1f - this.Setting.DriftEffectiveness;
+            }
+
+            // Acceleration/Braking (scaled by effective longitudinal friction and GasSensitivity).
+            var accelSpeedFactor = math.lerp(1f, 1f, math.abs(fwdSpeed) / this.Setting.TopSpeed);
+            var accelForce = effGasBrake * this.Setting.Acceleration * accelSpeedFactor;
+            if (effGasBrake < 0f)
+            {
+                accelForce *= this.Setting.ReversePowerMultiplier; // Use setting for reverse power
+            }
+
+            // Apply acceleration/braking force, modulated by GasSensitivity AND effective longitudinal friction
+            fwdSpeed += accelForce * deltaTime * this.Setting.GasSensitivity * effLongFriction;
+
+            // Apply coasting or braking deceleration based on input.
+            if (effGasBrake == 0f && math.abs(fwdSpeed) > 0.1f)
+            {
+                fwdSpeed = math.lerp(fwdSpeed, 0f, deltaTime * this.Setting.NaturalDeceleration); // Use setting for natural deceleration
+            }
+            else if (effGasBrake < 0f && fwdSpeed > 0f)
+            {
+                fwdSpeed = math.max(0f, fwdSpeed - (this.Setting.BrakingPower * deltaTime * effLongFriction)); // Scaled by longitudinal friction
+            }
+            else if (effGasBrake > 0f && fwdSpeed < 0f)
+            {
+                fwdSpeed = math.min(0f, fwdSpeed + (this.Setting.BrakingPower * deltaTime * effLongFriction)); // Scaled by longitudinal friction
+            }
+
+            // Clamp forward speed to limits (including reverse speed).
+            fwdSpeed = math.clamp(fwdSpeed, -10f, this.Setting.TopSpeed);
+
+            // Snap forward speed to zero if very close and no input.
+            if (math.abs(fwdSpeed) < 0.1f && effGasBrake == 0f)
+            {
+                fwdSpeed = 0f;
+            }
+
+            // Apply lateral friction to reduce sideways movement
+            latSpeed = math.lerp(latSpeed, 0f, deltaTime * effLatFriction);
+
+            // Clamp lateral speed.
+            latSpeed = math.clamp(latSpeed, -this.Setting.MaxLateralSpeed, this.Setting.MaxLateralSpeed);
+
+            // Apply speed loss during turning.
+            var turnSpeedLoss = math.abs(this.angularVelocity) * math.abs(fwdSpeed) * this.Setting.TurningSpeedLossFactor * deltaTime;
+            fwdSpeed -= turnSpeedLoss;
+
+            // Steering and Angular Velocity calculations.
+            var effSteer = this.steerAnalog;
+
+            // Apply speed-sensitive steering damping (HighSpeedTurningDamping)
+            var speedNorm = math.clamp(math.abs(fwdSpeed) / this.Setting.TopSpeed, 0f, 1f);
+            var speedDampFactor = math.lerp(1f, this.Setting.HighSpeedTurningDamping, speedNorm);
+            var dampSteerSens = this.Setting.SteeringSensitivity * speedDampFactor;
+
+            // Calculate base steering angle.
+            var steerAngleRad = effSteer * dampSteerSens * (math.PI / 180f);
+
+            // Calculate wheelbase-dependent turning rate.
+            var wheelbaseTurnRate = 0f;
+            if (this.Setting.VehicleWheelbase > 0.01f)
+            {
+                // This is the core realistic turning based on speed and wheelbase
+                wheelbaseTurnRate = (fwdSpeed * math.sin(steerAngleRad)) / this.Setting.VehicleWheelbase;
+            }
+
+            // Apply low-speed turning boost as a multiplier to wheelbaseTurnRate
+            // Boost factor is 1.0 at or above PivotTurningBlendSpeed, and increases up to LowSpeedTurningBoost as speed approaches 0.
+            var lowSpeedBoost = math.lerp(this.Setting.LowSpeedTurningBoost, 1f, math.abs(fwdSpeed) / this.Setting.PivotTurningBlendSpeed);
+            lowSpeedBoost = math.clamp(lowSpeedBoost, 1f, this.Setting.LowSpeedTurningBoost); // Ensure it doesn't go below 1.0
+
+            // Apply boost to the wheelbase turn
+            var desiredAngularVelocity = wheelbaseTurnRate * lowSpeedBoost;
+
+            // Smooth and damp angular velocity.
+            this.angularVelocity = math.lerp(this.angularVelocity, desiredAngularVelocity, deltaTime * CSteeringResponse);
+            this.angularVelocity = math.lerp(this.angularVelocity, 0f, deltaTime * CRotationalDrag);
+
+            // Update Vehicle State: velocity and rotation.
+            currentMoving.m_Velocity = (forward * fwdSpeed) + (right * latSpeed);
+            var rot = quaternion.AxisAngle(math.up(), this.angularVelocity * deltaTime);
+            currentTransform.m_Rotation = math.normalize(math.mul(currentTransform.m_Rotation, rot));
+
+            // Set updated components back to the entity
+            this.EntityManager.SetComponentData(this.entity, currentTransform);
+            this.EntityManager.SetComponentData(this.entity, currentMoving);
+
+            // Mark entity as Updated to ensure game systems process this change.
+            // ComponentHelper.SafeAddComponent<Game.Common.Updated>(this.EntityManager, this.entity);
         }
 
         /// <summary>
@@ -394,13 +594,13 @@ namespace VehicleDriver.Systems
             // Exit if target entity is null or no longer exists.
             if (this.entity == Entity.Null)
             {
-                Mod.LOG.Info("[ControlToolSystem] Drive: Target entity is NULL. Exiting.");
+                Mod.LOG.Info("[ControlSystem] Drive: Target entity is NULL. Exiting.");
                 return inputDeps;
             }
 
             if (!this.EntityManager.Exists(this.entity))
             {
-                Mod.LOG.Info($"[ControlToolSystem] OnUpdate: Target entity {this.entity.Index}:{this.entity.Version} no longer exists. Exiting.");
+                Mod.LOG.Info($"[ControlSystem] OnUpdate: Target entity {this.entity.Index}:{this.entity.Version} no longer exists. Exiting.");
                 Mod.Instance.ExitControlCleanup(false); // Trigger clean-up as entity is gone.
                 return inputDeps;
             }
@@ -408,11 +608,11 @@ namespace VehicleDriver.Systems
             // Ensure settings are available. Fallback to Mod.Instance.Setting if not set.
             if (this.Setting == null)
             {
-                Mod.LOG.Warn("[ControlToolSystem] OnUpdate: Setting is NULL. This should not happen if initialized correctly. Attempting to get from Mod.Instance.");
+                Mod.LOG.Warn("[ControlSystem] OnUpdate: Setting is NULL. This should not happen if initialized correctly. Attempting to get from Mod.Instance.");
                 this.Setting = Mod.Instance?.Setting;
                 if (this.Setting == null)
                 {
-                    Mod.LOG.Critical("[ControlToolSystem] OnUpdate: Setting is still NULL after fallback attempt. Cannot apply movement. Exiting update.");
+                    Mod.LOG.Critical("[ControlSystem] OnUpdate: Setting is still NULL after fallback attempt. Cannot apply movement. Exiting update.");
                     return inputDeps;
                 }
             }
@@ -599,46 +799,46 @@ namespace VehicleDriver.Systems
             newTransform.m_Rotation = math.normalize(math.mul(newTransform.m_Rotation, rot));
 
             // Apply velocity to position.
-            newTransform.m_Position += newMoving.m_Velocity * dt;
+            // Disabling might fix the animations
+            // newTransform.m_Position += newMoving.m_Velocity * dt;
 
             // Set updated components back to the entity.
             this.EntityManager.SetComponentData(this.entity, newTransform);
             this.EntityManager.SetComponentData(this.entity, newMoving);
 
-            // Manually update TransformFrame for smooth rendering.
+            /*
+            // Write the current transform to all 4 TransformFrame slots.
+            //
+            // ObjectInterpolateSystem derives wheel spin from the delta between the
+            // STORED InterpolatedTransform (computed and saved last rendering frame) and
+            // the NEWLY computed one this frame. Since we update every rendering frame,
+            // that delta equals velocity * dt — exactly the correct spin rate.
+            //
+            // Writing all 4 slots with the same data eliminates the reversed-slot artefact:
+            // CalculateUpdateFrames cycles updateFrame1 through 0→1→2→3 every ~3 frames.
+            // If [0,1]=prev and [2,3]=curr, then when updateFrame1=3 it reads frames[3]
+            // (curr) as "old" and frames[0] (prev) as "new" — reversed — causing wheels
+            // to spin backward and Swaying to see a velocity spike every ~12 frames.
+            // All-same slots means frame1 == frame2 always, so CalculateTransform returns
+            // exactly P_current, and the delta with the stored P_previous is always correct.
+            //
+            // The m_Velocity field is used by CalculateTransform's Bezier tangent, so
+            // including the real velocity preserves interpolation quality.
             if (this.EntityManager.HasBuffer<Game.Objects.TransformFrame>(this.entity))
             {
                 var transformFrames = this.EntityManager.GetBuffer<Game.Objects.TransformFrame>(this.entity);
 
-                // Ensure capacity for 4 frames, as used by vanilla.
                 if (transformFrames.Length != 4)
                 {
                     transformFrames.Resize(4, NativeArrayOptions.ClearMemory);
                 }
 
-                // Initialize previous data if this is the first frame of control.
-                if (!this.hasPreviousFrame)
-                {
-                    this.previousTransform = newTransform;
-                    this.previousMoving = newMoving;
-                    this.hasPreviousFrame = true;
-                }
-
-                // Implement the 4-frame interpolation strategy.
-                transformFrames[0] = new Game.Objects.TransformFrame(this.previousTransform, this.previousMoving);
-                transformFrames[1] = transformFrames[0]; // Copy of Frame 0
-                transformFrames[2] = new Game.Objects.TransformFrame(newTransform, newMoving);
-                transformFrames[3] = transformFrames[2]; // Copy of Frame 2
-
-                // Store current state to be "previous" for the next frame.
-                this.previousTransform = newTransform;
-                this.previousMoving = newMoving;
-            }
-            else
-            {
-                // If buffer is missing, reset flag to re-initialize next time.
-                this.hasPreviousFrame = false;
-            }
+                var currentFrame = new Game.Objects.TransformFrame(newTransform, newMoving);
+                transformFrames[0] = currentFrame;
+                transformFrames[1] = currentFrame;
+                transformFrames[2] = currentFrame;
+                transformFrames[3] = currentFrame;
+            }*/
 
             // Mark entity as Updated to ensure game systems process this change.
             ComponentHelper.SafeAddComponent<Game.Common.Updated>(this.EntityManager, this.entity);

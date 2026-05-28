@@ -68,15 +68,15 @@ namespace VehicleDriver
         /// <summary>
         /// Represents the settings configuration for the <see cref="Mod"/> class,
         /// managing UI customization and input keybindings.
-        /// This field is marked as internal to allow direct access by other mod systems (e.g., <see cref="ControlToolSystem"/>)
-        /// for retrieving user-defined settings, which is essential for the mod's behavior.
+        /// This field is marked as internal to allow direct access by other mod systems (e.g., <see cref="ControlSystem"/>)
+        /// for retrieving user-defined settings, which is essential for the mod's behaviour.
         /// </summary>
         [SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1401:Fields should be private", Justification = "This field needs to be internal for direct access by other mod systems for retrieving user settings, which is essential for proper functionality.")]
         internal Setting Setting;
 
         /// <summary>
         /// Gets or sets the <see cref="InputHelper"/> instance, which manages input actions and provides their current state.
-        /// This field is marked as internal to allow direct access by other mod systems (e.g., <see cref="ControlToolSystem"/>)
+        /// This field is marked as internal to allow direct access by other mod systems (e.g., <see cref="ControlSystem"/>)
         /// for reading input values, which is necessary for the mod's core control logic and performance within the ECS.
         /// </summary>
         [SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1401:Fields should be private", Justification = "This field needs to be internal for direct access by other mod systems for reading input values, which is essential for proper functionality and performance within the ECS.")]
@@ -90,11 +90,13 @@ namespace VehicleDriver
         /// This direct access is necessary for the mod's architecture and performance in the game's ECS environment.
         /// </summary>
         [SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1401:Fields should be private", Justification = "This field needs to be internal and static for direct access by other mod systems and methods for proper functionality and performance within the ECS.")]
+
+        // ReSharper disable once InconsistentNaming
         private static EntityControlData controlData;
 
         private ToolSystem toolSystem;
         private DefaultToolSystem defaultToolSystem;
-        private ControlToolSystem controlToolSystem;
+        private ControlSystem controlSystem;
         private PrefabSystem prefabSystem;
         private CameraControlSystem cameraControlSystem;
         private Entity savedControlledEntity = Entity.Null;
@@ -113,8 +115,8 @@ namespace VehicleDriver
 
         /// <summary>
         /// Called when the mod is disposed (e.g., game shutdown or mod unload).
-        /// Releases resources and performs cleanup when the mod is disposed of.
-        /// Unsubscribes from game events and input actions to prevent memory leaks or unintended behavior.
+        /// Releases resources and performs clean-up when the mod is disposed of.
+        /// Unsubscribes from game events and input actions to prevent memory leaks or unintended behaviour.
         /// Disables the entity input handler and attempts to gracefully release any controlled entities.
         /// </summary>
         public void OnDispose()
@@ -138,7 +140,7 @@ namespace VehicleDriver
             this.InputHelper?.Disable();
 
             // If an entity is still controlled, try to release it gracefully
-            if (this.toolSystem.activeTool != this.controlToolSystem || this.savedControlledEntity == Entity.Null || !World.DefaultGameObjectInjectionWorld.EntityManager.Exists(this.savedControlledEntity))
+            if (this.controlSystem.CurrentState != VehicleDriver.Systems.ControlSystem.State.Driving || this.savedControlledEntity == Entity.Null || !World.DefaultGameObjectInjectionWorld.EntityManager.Exists(this.savedControlledEntity))
             {
                 return;
             }
@@ -161,8 +163,8 @@ namespace VehicleDriver
             // Initialize systems and handlers early
             this.toolSystem = World.DefaultGameObjectInjectionWorld.GetOrCreateSystemManaged<ToolSystem>();
 
-            // Get the ControlToolSystem from the world as it's now a standalone system
-            this.controlToolSystem = World.DefaultGameObjectInjectionWorld.GetOrCreateSystemManaged<ControlToolSystem>();
+            // Get the ControlSystem from the world as it's now a standalone system
+            this.controlSystem = World.DefaultGameObjectInjectionWorld.GetOrCreateSystemManaged<ControlSystem>();
             this.defaultToolSystem = World.DefaultGameObjectInjectionWorld.GetOrCreateSystemManaged<DefaultToolSystem>();
             this.cameraControlSystem = World.DefaultGameObjectInjectionWorld.GetOrCreateSystemManaged<CameraControlSystem>();
 
@@ -181,18 +183,18 @@ namespace VehicleDriver
             GameManager.instance.localizationManager.AddSource("en-US", new LocaleEn(this.Setting));
             GameManager.instance.onGameLoadingComplete += this.OnGameLoadingComplete;
 
-            // Explicitly set the Setting reference on the ControlToolSystem and CameraControlSystem here, after they're initialized.
-            this.controlToolSystem.Setting = this.Setting;
-            this.cameraControlSystem.SetSetting(this.Setting);
+            // Explicitly set the Setting reference on the ControlSystem and CameraControlSystem here, after they're initialized.
+            this.controlSystem.Setting = this.Setting;
+            this.cameraControlSystem.Setting = this.Setting;
 
-            // Ensure ControlToolSystem updates after ToolUpdate phase
-            updateSystem.UpdateAfter<ControlToolSystem>(SystemUpdatePhase.ToolUpdate);
+            // Ensure ControlSystem updates after GameSimulation phase poossibly fixing wheel animation
+            updateSystem.UpdateAfter<ControlSystem>(SystemUpdatePhase.GameSimulation);
 
             // Ensure CameraControlSystem updates after LateUpdate
             updateSystem.UpdateAfter<CameraControlSystem>(SystemUpdatePhase.LateUpdate);
 
             // Register HidingUISystem to be updated before the UI update phase to ensure the UI state is managed correctly.
-            updateSystem.UpdateBefore<Systems.HidingUISystem>(SystemUpdatePhase.UIUpdate);
+            updateSystem.UpdateBefore<Systems.HidingUISystem>(SystemUpdatePhase.UIUpdate); // Disabled UI hiding
         }
 
         /// <summary>
@@ -221,10 +223,10 @@ namespace VehicleDriver
         /// </summary>
         private void ExitControl()
         {
-            var entity = this.controlToolSystem.GetTarget();
+            var entity = this.controlSystem.GetTarget();
             LOG.Info($"[ExitControl] Started for entity {entity.Index}:{entity.Version}");
 
-            // There is a case when controlled vehicle got into accident during manual control, after a while vehicle gets deleted and we can't escape Hidden UI or mod ControlToolSystem if user did not exit the vehicle. Two Part Problem here and in HidingUISystem todo
+            // There is a case when controlled vehicle got into accident during manual control, after a while vehicle gets deleted and we can't escape Hidden UI or mod ControlSystem if user did not exit the vehicle. Two Part Problem here and in HidingUISystem todo
             // If no target entity is set or it no longer exists, exit and perform cleanup.
             if (entity == Entity.Null || !EntityManager.Exists(entity))
             {
@@ -234,8 +236,9 @@ namespace VehicleDriver
             }
 
             // Switch back to the DefaultToolSystem and disable mod input.
-            this.controlToolSystem.SetDefaultState();
-            this.toolSystem.activeTool = this.defaultToolSystem;
+            this.controlSystem.SetDefaultState();
+
+            // this.toolSystem.activeTool = this.defaultToolSystem;
             this.InputHelper.Disable();
 
             // Call CameraControlSystem to restore original camera.
@@ -250,7 +253,7 @@ namespace VehicleDriver
             // Restore components based on the original state of the vehicle (whether it was parked or moving).
             ControlDeactivatorHelper.RestoreEntityComponents(EntityManager, entity, Mod.controlData);
 
-            // 2. Clear the old path and trigger a refresh
+            // Clear the old path and trigger a refresh
             // Instead of PathfindOrder, we clear the PathElement buffer.
             // When the AI sees an empty path but has a Navigation component, it auto-requests a new path.
             if (EntityManager.HasBuffer<Game.Pathfind.PathElement>(entity))
@@ -258,7 +261,40 @@ namespace VehicleDriver
                 EntityManager.GetBuffer<Game.Pathfind.PathElement>(entity).Clear();
             }
 
-            // 3. Trigger the recalculation.
+            // Synchronize final positioning data to prevent a simulation race condition.
+            // Since pathfinding calculates a fresh route from the release position, any empty or
+            // stale slots in the 4-frame TransformFrame interpolation buffer could read (0,0,0).
+            // This forces all 4 tracking frames to snapshot our exact final coordinates, ensuring
+            // the simulation anchors the path here instead of directing the car to the centre of the world.
+            // which also causes the vehicle to disaper or get deleted if its far enough
+            if (EntityManager.HasComponent<Game.Objects.Transform>(entity))
+            {
+                // Fetch the exact final placement transform and moving components safely
+                var finalTransform = EntityManager.GetComponentData<Game.Objects.Transform>(entity);
+
+                var finalMoving = EntityManager.HasComponent<Game.Objects.Moving>(entity)
+                    ? EntityManager.GetComponentData<Game.Objects.Moving>(entity)
+                    : default(Game.Objects.Moving);
+
+                // Re-initialize the game's tracking frames to prevent dropping to (0,0,0)
+                if (EntityManager.HasBuffer<Game.Objects.TransformFrame>(entity))
+                {
+                    var transformFrames = EntityManager.GetBuffer<Game.Objects.TransformFrame>(entity);
+                    if (transformFrames.Length >= 4)
+                    {
+                        var cleanFrame = new Game.Objects.TransformFrame(finalTransform, finalMoving);
+                        transformFrames[0] = cleanFrame;
+                        transformFrames[1] = cleanFrame;
+                        transformFrames[2] = cleanFrame;
+                        transformFrames[3] = cleanFrame;
+                    }
+                }
+            }
+
+            // Mark the entity as Updated so the world re-snaps it to the road surface
+            VehicleDriver.Helpers.ComponentHelper.SafeAddComponent<Game.Common.Updated>(EntityManager, entity);
+
+            // Trigger the recalculation.
             // We use the 'Updated' flag which is a public bitmask.
             if (EntityManager.HasComponent<Game.Pathfind.PathOwner>(entity))
             {
@@ -270,6 +306,9 @@ namespace VehicleDriver
 
                 EntityManager.SetComponentData(entity, pathOwner);
             }
+
+            // clear Mod.controlData so it doesn't hold onto a stale structural reference of a vehicle you are no longer driving.
+            Mod.controlData = default;
 
             this.ExitControlCleanup(true);
         }
@@ -284,6 +323,8 @@ namespace VehicleDriver
         {
             this.prefabSystem = World.DefaultGameObjectInjectionWorld.GetExistingSystemManaged<PrefabSystem>();
 
+            // Disable patching CarMoveSystem for now so vehicle is conforming to terrain, but vehicle collides very easy
+            /*
             // Patching CarMoveSystem is redundant as we are always adding OutOfControl to controller vehicle which in turn excludes CarMoveSystem from running on controlled entity.
             // Patch VehicleOutOfControlSystem to prevent AI from interfering with controlled vehicles.
             // This ensures that entities with EntityControlData are not processed by the vanilla OutOfControlSystem.
@@ -297,6 +338,7 @@ namespace VehicleDriver
                     ComponentType.ReadWrite<Game.Objects.TransformFrame>(),
                 },
                 noneTypes: new[] { ComponentType.ReadOnly<Game.Common.Deleted>(), ComponentType.ReadOnly<Game.Tools.Temp>(), ComponentType.ReadOnly<TripSource>(), ComponentType.ReadOnly<EntityControlData>() });
+            */
 
             var toggleControlAction = this.Setting.GetAction(ToggleControlEntityActionName);
             if (toggleControlAction != null)
@@ -340,7 +382,7 @@ namespace VehicleDriver
                 return;
             }
 
-            if (this.toolSystem.activeTool == this.controlToolSystem)
+            if (this.controlSystem.CurrentState == VehicleDriver.Systems.ControlSystem.State.Driving)
             {
                 this.ExitControl();
             }
@@ -365,9 +407,9 @@ namespace VehicleDriver
                 return;
             }
 
-            if (this.toolSystem.activeTool == this.controlToolSystem)
+            if (this.controlSystem.CurrentState == VehicleDriver.Systems.ControlSystem.State.Driving)
             {
-                this.controlToolSystem.RespawnEntity();
+                this.controlSystem.RespawnEntity();
             }
             else
             {
@@ -385,6 +427,10 @@ namespace VehicleDriver
         {
             // Capture the currently selected entity before any clearing actions
             var entity = this.toolSystem.selected;
+            if (entity == Entity.Null)
+            {
+                return;
+            }
 
             // Validate entity: Must exist, be a Car, and not be destroyed or already involved in an accident.
             if (entity == Entity.Null || !EntityManager.Exists(entity) || !EntityManager.HasComponent<Game.Vehicles.Car>(entity) || EntityManager.HasComponent<Game.Common.Destroyed>(entity) || EntityManager.HasComponent<Game.Events.InvolvedInAccident>(entity))
@@ -394,7 +440,7 @@ namespace VehicleDriver
             }
 
             // Prevent taking control if already controlled by this mod
-            if (this.toolSystem.activeTool == this.controlToolSystem && this.savedControlledEntity != Entity.Null && this.savedControlledEntity == entity)
+            if (this.controlSystem.CurrentState == VehicleDriver.Systems.ControlSystem.State.Driving && this.savedControlledEntity != Entity.Null && this.savedControlledEntity == entity)
             {
                 LOG.Warn($"[TakeControl] Blocked: entity {entity.Index}:{entity.Version} is already controlled by this mod. Cannot take over again.");
                 return;
@@ -465,7 +511,7 @@ namespace VehicleDriver
 
             // Assign the newly created struct to savedControlData
             this.savedControlData = newControlData;
-            this.controlToolSystem.SetOriginalComponentList(entity);
+            this.controlSystem.SetOriginalComponentList(entity);
 
             // Apply the necessary components to the entity for manual control.
             ControlActivatorHelper.ApplyControlComponents(EntityManager, entity, this.savedControlData);
@@ -477,10 +523,9 @@ namespace VehicleDriver
             this.cameraControlSystem.SetControlledEntity(entity);
             this.cameraControlSystem.OnTakeControl();
 
-            // Switch the current tool to ControlToolSystem and enable input.
-            this.controlToolSystem.SetTarget(entity);
-            this.controlToolSystem.SetDrivingState();
-            this.toolSystem.activeTool = this.controlToolSystem;
+            // Switch the current tool to ControlSystem and enable input.
+            this.controlSystem.SetTarget(entity);
+            this.controlSystem.SetDrivingState();
             this.InputHelper.Enable();
         }
     }

@@ -5,6 +5,9 @@
 // ReSharper disable RedundantNameQualifier
 namespace VehicleDriver.Systems
 {
+    using System;
+    using System.Diagnostics.CodeAnalysis;
+    using Colossal.Mathematics;
     using Game;
     using Game.Rendering;
     using Game.UI.InGame;
@@ -17,252 +20,277 @@ namespace VehicleDriver.Systems
     /// A system responsible for managing camera behaviour during manual vehicle control.
     /// This includes setting custom camera positions, rotations, and restoring original camera states.
     /// </summary>
+    [UpdateAfter(typeof(CameraUpdateSystem))]
     public partial class CameraControlSystem : GameSystemBase
     {
-        private Setting setting;
+        /// <summary>
+        /// The user settings for this mod, assigned directly from the <see cref="Mod"/> class after
+        /// initialization. Marked internal because <see cref="Mod"/> sets it on startup.
+        /// </summary>
+        [SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1401:Fields should be private", Justification = "Assigned directly by Mod on startup.")]
+        internal Setting Setting;
+
         private Entity controlledEntity = Entity.Null;
-        private IGameCameraController originalActiveCameraController;
+        private IGameCameraController savedCameraController;
         private CameraUpdateSystem cameraUpdateSystem;
 
         /// <summary>
-        /// Sets the settings instance for this camera control system.
+        /// Cached world-space camera position, lerped each frame in CameraCustom mode.
         /// </summary>
-        /// <param name="newSetting">The <see cref="Settings.Setting"/> instance from the mod.</param>
-        internal void SetSetting(Setting newSetting)
-        {
-            this.setting = newSetting;
-        }
+        private Vector3 smoothedCamPosition;
 
         /// <summary>
-        /// Sets the entity that the camera should follow or reference.
+        /// Cached world-space camera rotation, slerped each frame in CameraCustom mode.
         /// </summary>
-        /// <param name="entity">The controlled entity.</param>
+        private Quaternion smoothedCamRotation;
+
+        /// <summary>
+        /// True on the very first frame of CameraCustom control. Used to seed the
+        /// smoothed values from the real camera position, preventing an initial jump.
+        /// </summary>
+        private bool isFirstCustomFrame = true;
+
+        /// <summary>
+        /// Sets the vehicle entity the camera should follow or reference.
+        /// </summary>
+        /// <param name="entity">The vehicle entity now under player control.</param>
         internal void SetControlledEntity(Entity entity)
         {
             this.controlledEntity = entity;
         }
 
         /// <summary>
-        /// Determines whether the camera is currently in a custom control mode.
-        /// </summary>
-        /// <returns>True if the camera is in custom mode, false otherwise.</returns>
-        internal bool IsInCustomCameraMode()
-        {
-            return this.setting.ModeDropdown == Setting.CameraModeEnum.CameraCustom;
-        }
-
-        /// <summary>
-        /// Adjusts the game camera based on the selected camera mode when control is taken.
+        /// Called when the player takes control of a vehicle.
+        /// Saves the current camera controller and switches to the appropriate mode.
         /// </summary>
         internal void OnTakeControl()
         {
-            if (Camera.main == null || SelectedInfoUISystem.s_CameraController == null || this.cameraUpdateSystem == null || this.setting == null)
+            if (this.controlledEntity == Entity.Null || Camera.main == null || this.Setting == null)
             {
-                Mod.LOG.Warn("[CameraControlSystem] Required camera systems or settings not available.");
                 return;
             }
 
-            if (this.setting.ModeDropdown == Setting.CameraModeEnum.CameraVanillaFollow)
+            this.savedCameraController = this.cameraUpdateSystem.activeCameraController;
+
+            switch (this.Setting.ModeDropdown)
             {
-                SelectedInfoUISystem.s_CameraController.followedEntity = this.controlledEntity;
-                SelectedInfoUISystem.s_CameraController.mode = OrbitCameraController.Mode.PhotoMode;
+                case Setting.CameraModeEnum.CameraVanillaFollow:
+                    this.ActivateVanillaFollow();
+                    break;
 
-                // Match position to the current game camera for smooth transition
-                SelectedInfoUISystem.s_CameraController.TryMatchPosition(this.cameraUpdateSystem.activeCameraController);
-                this.cameraUpdateSystem.activeCameraController = SelectedInfoUISystem.s_CameraController;
-                Mod.LOG.Info("[CameraControlSystem] Switched to Vanilla Follow Camera.");
-            }
-            else if (this.setting.ModeDropdown == Setting.CameraModeEnum.CameraCustom)
-            {
-                // Storing originalCameraPosition and originalCameraRotation here, though not directly used for restoration.
-                // Their values are overwritten if control is retaken without exiting.
-                this.originalActiveCameraController = this.cameraUpdateSystem.activeCameraController;
+                case Setting.CameraModeEnum.CameraCustom:
+                    this.ActivateCustomCamera();
+                    break;
 
-                if (this.originalActiveCameraController is MonoBehaviour monoBehaviour)
-                {
-                    monoBehaviour.enabled = false;
-                    Mod.LOG.Info($"[CameraControlSystem] Disabled original active camera controller: {monoBehaviour.GetType().Name}");
-                }
-                else
-                {
-                    Mod.LOG.Warn("[CameraControlSystem] Original active camera controller is not a MonoBehaviour or couldn't be disabled.");
-                }
+                case Setting.CameraModeEnum.CameraVanillaFree:
+                    this.ActivateVanillaFree();
+                    break;
 
-                // Set the active camera controller to null to prevent conflicts with direct camera manipulation.
-                this.cameraUpdateSystem.activeCameraController = null;
-
-                // Disable input for other camera controllers
-                if (this.cameraUpdateSystem.gamePlayController != null)
-                {
-                    this.cameraUpdateSystem.gamePlayController.inputEnabled = false;
-                }
-
-                Mod.LOG.Info("[CameraControlSystem] Switched to direct camera control (Custom Camera).");
-            }
-            else if (this.setting.ModeDropdown == Setting.CameraModeEnum.CameraVanillaFree)
-            {
-                this.originalActiveCameraController = this.cameraUpdateSystem.activeCameraController; // Save whatever was active
-                this.cameraUpdateSystem.activeCameraController = this.cameraUpdateSystem.gamePlayController; // Set to gameplay controller
-
-                // Ensure the gameplay controller's input is enabled for free camera movement
-                if (this.cameraUpdateSystem.gamePlayController != null)
-                {
-                    this.cameraUpdateSystem.gamePlayController.inputEnabled = true;
-                }
-
-                // Try to set the gameplay camera to a reasonable "free" starting point above the entity.
-                if (this.controlledEntity != Entity.Null && this.EntityManager.HasComponent<Game.Objects.Transform>(this.controlledEntity))
-                {
-                    var vehicleTransform = this.EntityManager.GetComponentData<Game.Objects.Transform>(this.controlledEntity);
-                    this.cameraUpdateSystem.gamePlayController.pivot = vehicleTransform.m_Position + new float3(0, 5f, 0); // Example pivot above vehicle
-                    this.cameraUpdateSystem.gamePlayController.zoom = 25f; // Example zoom
-                    this.cameraUpdateSystem.gamePlayController.rotation = new Vector3(45f, 0, 0); // Example angle (looking down)
-                }
-
-                Mod.LOG.Info("[CameraControlSystem] Switched to Vanilla Free Camera.");
+                default:
+                    throw new ArgumentOutOfRangeException();
             }
         }
 
         /// <summary>
-        /// Restores the camera to its original state when control is released.
+        /// Called when the player releases control of a vehicle.
+        /// Restores the camera to a non-snapping state at the vehicle's current position.
         /// </summary>
         internal void OnExitControl()
         {
-            if (Camera.main == null || this.cameraUpdateSystem == null)
+            if (Camera.main == null)
             {
-                Mod.LOG.Warn("[CameraControlSystem] Required camera systems not available. Skipping camera restore.");
                 return;
             }
 
-            var currentCameraPosition = Camera.main.transform.position;
-            var currentCameraRotation = Camera.main.transform.rotation;
-            var desiredEulerRotation = currentCameraRotation.eulerAngles;
+            var exitRotation = Camera.main.transform.rotation;
+            var exitEulerAngles = exitRotation.eulerAngles;
 
-            Vector3 finalPivot;
-            float finalZoom;
-
-            // Determine pivot and zoom based on entity validity.
-            if (this.EntityManager.Exists(this.controlledEntity))
+            if (!this.GetVehicleCameraTarget(out Vector3 exitPivot, out float exitPureZoom, out float exitOrbitZoom))
             {
-                Vector3 vehiclePosition = this.EntityManager.GetComponentData<Game.Objects.Transform>(this.controlledEntity).m_Position;
-                finalZoom = Vector3.Distance(currentCameraPosition, vehiclePosition);
-                finalPivot = vehiclePosition;
-            }
-            else
-            {
-                Mod.LOG.Warn($"[CameraControlSystem] Controlled vehicle {this.controlledEntity.Index}:{this.controlledEntity.Version} no longer exists or has no GameTransform. Restoring camera to a default free position.");
-                finalZoom = 50f; // Default zoom
-                finalPivot = currentCameraPosition + (currentCameraRotation * new Vector3(0, 0, finalZoom)); // Pivot in front of the camera
+                exitPureZoom = exitOrbitZoom = 50f;
+                exitPivot = Camera.main.transform.position + (exitRotation * new Vector3(0f, 0f, exitPureZoom));
             }
 
-            if (this.originalActiveCameraController != null && this.cameraUpdateSystem != null)
+            bool syncPosition = this.Setting.ModeDropdown == Setting.CameraModeEnum.CameraCustom;
+            var orbitCam = SelectedInfoUISystem.s_CameraController;
+
+            if (this.EntityManager.Exists(this.controlledEntity) &&
+                this.Setting.ModeDropdown != Setting.CameraModeEnum.CameraVanillaFree &&
+                orbitCam != null)
             {
-                if (this.originalActiveCameraController is MonoBehaviour monoBehaviour)
-                {
-                    monoBehaviour.enabled = true;
-                }
-
-                this.cameraUpdateSystem.activeCameraController = this.originalActiveCameraController;
-
-                if (this.originalActiveCameraController is OrbitCameraController orbitCam)
-                {
-                    orbitCam.pivot = finalPivot;
-                    orbitCam.zoom = finalZoom;
-                    orbitCam.rotation = desiredEulerRotation;
-                    orbitCam.followedEntity = this.controlledEntity; // Attempt to re-link to the entity for orbit cam
-                    orbitCam.mode = OrbitCameraController.Mode.PhotoMode; // Ensure it's in follow mode
-                }
-                else
-                {
-                    this.cameraUpdateSystem.activeCameraController.pivot = finalPivot;
-                    this.cameraUpdateSystem.activeCameraController.zoom = finalZoom;
-                    this.cameraUpdateSystem.activeCameraController.rotation = desiredEulerRotation;
-                }
-
-                if (this.cameraUpdateSystem.gamePlayController != null)
-                {
-                    this.cameraUpdateSystem.gamePlayController.inputEnabled = true;
-                }
-
-                Mod.LOG.Info("[CameraControlSystem] Restored original camera controller.");
+                // Hand off to the orbit camera following the vehicle, so the player can keep watching it drive away.
+                orbitCam.pivot = exitPivot;
+                orbitCam.zoom = exitOrbitZoom;
+                orbitCam.rotation = exitEulerAngles;
+                orbitCam.followedEntity = this.controlledEntity;
+                orbitCam.mode = OrbitCameraController.Mode.Follow;
+                this.cameraUpdateSystem.activeCameraController = orbitCam;
             }
+            else if (this.savedCameraController != null && !(this.savedCameraController is OrbitCameraController))
+            {
+                this.cameraUpdateSystem.activeCameraController = this.savedCameraController;
 
-            // Fallback for when no originalActiveCameraController was saved, or it's invalid.
+                if (syncPosition)
+                {
+                    this.savedCameraController.pivot = exitPivot;
+                    this.savedCameraController.zoom = exitPureZoom;
+                    this.savedCameraController.rotation = exitEulerAngles;
+                }
+            }
             else if (this.cameraUpdateSystem.gamePlayController != null)
             {
-                if (SelectedInfoUISystem.s_CameraController is { } orbitCam)
+                var gamePlayCtrl = this.cameraUpdateSystem.gamePlayController;
+                this.cameraUpdateSystem.activeCameraController = gamePlayCtrl;
+
+                if (syncPosition)
                 {
-                    orbitCam.followedEntity = Entity.Null; // Ensure vanilla orbit camera stops following
+                    gamePlayCtrl.pivot = exitPivot;
+                    gamePlayCtrl.zoom = exitPureZoom;
+                    gamePlayCtrl.rotation = exitEulerAngles;
                 }
-
-                this.cameraUpdateSystem.activeCameraController = this.cameraUpdateSystem.gamePlayController;
-                this.cameraUpdateSystem.gamePlayController.pivot = finalPivot;
-                this.cameraUpdateSystem.gamePlayController.zoom = finalZoom;
-                this.cameraUpdateSystem.gamePlayController.rotation = desiredEulerRotation;
-
-                if (this.cameraUpdateSystem.gamePlayController != null)
-                {
-                    this.cameraUpdateSystem.gamePlayController.inputEnabled = true;
-                }
-
-                Mod.LOG.Info("[CameraControlSystem] Restored to default gameplay camera.");
             }
-            else
+
+            if (this.cameraUpdateSystem.gamePlayController != null)
             {
-                Mod.LOG.Warn("[CameraControlSystem] No camera controller available to restore.");
+                this.cameraUpdateSystem.gamePlayController.inputEnabled = true;
             }
 
-            this.originalActiveCameraController = null; // Clear the saved reference after restoration
-            this.controlledEntity = Entity.Null; // Clear the controlled entity reference
+            this.savedCameraController = null;
+            this.controlledEntity = Entity.Null;
+            this.isFirstCustomFrame = true;
         }
 
         /// <summary>
-        /// Called when the system is created. Initializes internal state and queries.
+        /// Initializes the camera update system reference.
         /// </summary>
         protected override void OnCreate()
         {
             base.OnCreate();
             this.cameraUpdateSystem = World.DefaultGameObjectInjectionWorld.GetOrCreateSystemManaged<CameraUpdateSystem>();
-            Mod.LOG.Info("[CameraControlSystem] OnCreate: CameraControlSystem created.");
         }
 
         /// <summary>
-        /// Called when the system is destroyed. Performs clean-up.
-        /// </summary>
-        protected override void OnDestroy()
-        {
-            base.OnDestroy();
-            Mod.LOG.Info("[CameraControlSystem] OnDestroy: CameraControlSystem destroyed.");
-        }
-
-        /// <summary>
-        /// Called every frame to update the system. Handles different tool states and schedules the driving job.
+        /// Per-frame update. Only active work happens in CameraCustom mode.
         /// </summary>
         protected override void OnUpdate()
         {
-            // Only update the camera if we are in custom camera mode and there's a controlled entity.
-            if (this.setting is { ModeDropdown: Setting.CameraModeEnum.CameraCustom } && this.controlledEntity != Entity.Null)
-            {
-                this.UpdateCustomCamera(SystemAPI.Time.DeltaTime);
-            }
-        }
-
-        /// <summary>
-        /// Updates the custom camera position and rotation.
-        /// This method should be called every frame when the custom camera mode is active.
-        /// </summary>
-        /// <param name="dt">Delta time for frame-rate independent calculations.</param>
-        private void UpdateCustomCamera(float dt)
-        {
-            if (this.controlledEntity == Entity.Null || !this.EntityManager.Exists(this.controlledEntity) || Camera.main == null || this.setting == null)
+            if (this.controlledEntity == Entity.Null || this.Setting.ModeDropdown != Setting.CameraModeEnum.CameraCustom)
             {
                 return;
             }
 
-            // Ensure that the entity has a Transform component before trying to access it.
+            // Ensure the gameplay controller stays active (nothing else should steal it while we're driving).
+            if (!ReferenceEquals(this.cameraUpdateSystem.activeCameraController, this.cameraUpdateSystem.gamePlayController))
+            {
+                this.cameraUpdateSystem.activeCameraController = this.cameraUpdateSystem.gamePlayController;
+            }
+
+            this.UpdateCustomCamera(SystemAPI.Time.DeltaTime);
+        }
+
+        /// <summary>
+        /// Switches to vanilla orbit-follow mode on the controlled vehicle.
+        /// </summary>
+        private void ActivateVanillaFollow()
+        {
+            var orbitCam = SelectedInfoUISystem.s_CameraController;
+            if (orbitCam != null)
+            {
+                orbitCam.followedEntity = this.controlledEntity;
+                orbitCam.mode = OrbitCameraController.Mode.Follow;
+                orbitCam.TryMatchPosition(this.savedCameraController);
+            }
+
+            this.cameraUpdateSystem.activeCameraController = orbitCam;
+        }
+
+        /// <summary>
+        /// Switches to the custom (scripted follow) camera mode.
+        /// </summary>
+        private void ActivateCustomCamera()
+        {
+            var gamePlayCtrl = this.cameraUpdateSystem.gamePlayController;
+            if (gamePlayCtrl != null)
+            {
+                if (this.savedCameraController != null)
+                {
+                    gamePlayCtrl.TryMatchPosition(this.savedCameraController);
+                }
+
+                gamePlayCtrl.inputEnabled = true;
+            }
+
+            this.cameraUpdateSystem.activeCameraController = gamePlayCtrl;
+
+            // Seed smoothed values from the real camera so the first frame has no position jump.
+            this.smoothedCamPosition = Camera.main.transform.position;
+            this.smoothedCamRotation = Camera.main.transform.rotation;
+
+            if (SelectedInfoUISystem.s_CameraController != null)
+            {
+                SelectedInfoUISystem.s_CameraController.followedEntity = this.controlledEntity;
+            }
+        }
+
+        /// <summary>
+        /// Switches to vanilla free (player-controlled) camera mode.
+        /// </summary>
+        private void ActivateVanillaFree()
+        {
+            var gamePlayCtrl = this.cameraUpdateSystem.gamePlayController;
+            if (gamePlayCtrl != null)
+            {
+                if (this.savedCameraController != null)
+                {
+                    gamePlayCtrl.TryMatchPosition(this.savedCameraController);
+                }
+
+                gamePlayCtrl.inputEnabled = true;
+            }
+
+            this.cameraUpdateSystem.activeCameraController = gamePlayCtrl;
+        }
+
+        /// <summary>
+        /// Calculates the vehicle's world-space pivot point and camera zoom distances.
+        /// Replicates vanilla logic to prevent snapping when handing the camera back.
+        /// </summary>
+        /// <param name="pivot">World-space pivot at the vehicle's bounding-box centre.</param>
+        /// <param name="pureZoom">Straight-line distance from Camera.main to the pivot.</param>
+        /// <param name="orbitZoom">Orbit zoom, reduced by the vehicle's bounding-box radius.</param>
+        /// <returns>True if the vehicle position was resolved successfully.</returns>
+        private bool GetVehicleCameraTarget(out Vector3 pivot, out float pureZoom, out float orbitZoom)
+        {
+            pivot = Vector3.zero;
+            pureZoom = orbitZoom = 0f;
+            int elementIndex = -1;
+
+            if (this.EntityManager.Exists(this.controlledEntity) &&
+                SelectedInfoUISystem.TryGetPosition(this.controlledEntity, this.EntityManager, ref elementIndex, out _, out float3 pos, out Bounds3 bounds, out _, true))
+            {
+                pivot = new Vector3(pos.x, MathUtils.Center(bounds.y), pos.z);
+                pureZoom = Camera.main != null ? Vector3.Distance(Camera.main.transform.position, pivot) : 0f;
+                orbitZoom = math.max(0.1f, pureZoom - (math.cmin(bounds.max - bounds.min) * 0.5f));
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Moves Camera.main each frame to follow the vehicle, with position and rotation smoothing.
+        /// Also keeps the vanilla controllers warm so switching modes mid-drive is seamless.
+        /// </summary>
+        /// <param name="dt">Delta time in seconds.</param>
+        private void UpdateCustomCamera(float dt)
+        {
+            if (!this.EntityManager.Exists(this.controlledEntity) || Camera.main == null || this.Setting == null)
+            {
+                return;
+            }
+
             if (!this.EntityManager.HasComponent<Game.Objects.Transform>(this.controlledEntity))
             {
-                Mod.LOG.Warn($"[CameraControlSystem.UpdateCustomCamera] Controlled entity {this.controlledEntity.Index}:{this.controlledEntity.Version} missing Transform component. Cannot update custom camera.");
                 return;
             }
 
@@ -270,13 +298,52 @@ namespace VehicleDriver.Systems
             Vector3 vehiclePosition = vehicleTransform.m_Position;
             Quaternion vehicleRotation = vehicleTransform.m_Rotation;
 
-            var cameraOffset = new Vector3(0f, this.setting.CameraOffsetY, -this.setting.CameraOffsetZ);
-            var desiredCameraPosition = vehiclePosition + (vehicleRotation * cameraOffset);
+            var localOffset = new Vector3(0f, this.Setting.CameraOffsetY, -this.Setting.CameraOffsetZ);
+            var targetCamPosition = vehiclePosition + (vehicleRotation * localOffset);
 
-            // Camera smoothing is now directly proportional to the respective input sensitivities.
-            // The CameraPositionLerpSpeed and CameraRotationLerpSpeed act as base multipliers.
-            Camera.main.transform.position = Vector3.Lerp(Camera.main.transform.position, desiredCameraPosition, this.setting.CameraPositionLerpSpeed * this.setting.GasSensitivity * dt);
-            Camera.main.transform.rotation = Quaternion.Slerp(Camera.main.transform.rotation, vehicleRotation, this.setting.CameraRotationLerpSpeed * this.setting.SteeringSensitivity * dt);
+            if (this.isFirstCustomFrame)
+            {
+                /*Mod.LOG.Debug($"[VehicleDriver CameraDebug] FIRST FRAME: " +
+                             $"CameraEuler: {Camera.main.transform.rotation.eulerAngles} | " +
+                             $"VehicleEuler: {vehicleRotation.eulerAngles} | " +
+                             $"Difference: {Quaternion.Angle(Camera.main.transform.rotation, vehicleRotation)} degrees");*/
+                this.smoothedCamPosition = Camera.main.transform.position;
+                this.smoothedCamRotation = Camera.main.transform.rotation;
+                this.isFirstCustomFrame = false;
+            }
+
+            this.smoothedCamPosition = Vector3.Lerp(
+                this.smoothedCamPosition,
+                targetCamPosition,
+                this.Setting.CameraPositionLerpSpeed * this.Setting.GasSensitivity * dt);
+
+            this.smoothedCamRotation = Quaternion.Slerp(
+                this.smoothedCamRotation,
+                vehicleRotation,
+                this.Setting.CameraRotationLerpSpeed * this.Setting.SteeringSensitivity * dt);
+
+            Camera.main.transform.position = this.smoothedCamPosition;
+            Camera.main.transform.rotation = this.smoothedCamRotation;
+
+            // Keep the vanilla controllers warm so switching modes mid-drive has no snap.
+            if (this.GetVehicleCameraTarget(out Vector3 warmPivot, out float warmPureZoom, out float warmOrbitZoom))
+            {
+                Vector3 warmEulerAngles = this.smoothedCamRotation.eulerAngles;
+
+                if (this.cameraUpdateSystem.gamePlayController != null)
+                {
+                    this.cameraUpdateSystem.gamePlayController.pivot = warmPivot;
+                    this.cameraUpdateSystem.gamePlayController.zoom = warmPureZoom;
+                    this.cameraUpdateSystem.gamePlayController.rotation = warmEulerAngles;
+                }
+
+                if (SelectedInfoUISystem.s_CameraController != null)
+                {
+                    SelectedInfoUISystem.s_CameraController.pivot = warmPivot;
+                    SelectedInfoUISystem.s_CameraController.zoom = warmOrbitZoom;
+                    SelectedInfoUISystem.s_CameraController.rotation = warmEulerAngles;
+                }
+            }
         }
     }
 }

@@ -10,25 +10,25 @@ namespace VehicleDriver.Helpers
     /// <summary>
     /// Handles entity input from keyboard and gamepad, managing input actions and providing their current state.
     /// </summary>
-    [SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1401:Fields should be private", Justification = "Public readonly fields are necessary to allow ControlToolSystem jobs to directly access input action instances without needing to pass them as method parameters, optimizing performance in Unity ECS.")]
+    [SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1401:Fields should be private", Justification = "Public readonly fields are necessary to allow ControlSystem jobs to directly access input action instances without needing to pass them as method parameters, optimizing performance in Unity ECS.")]
 
     public class InputHelper
     {
         /// <summary>
         /// Gets the <see cref="InputAction"/> for gas and brake input.
-        /// This action is publicly accessible so the <c>ControlToolSystem</c> can read its current values.
+        /// This action is publicly accessible so the <c>ControlSystem</c> can read its current values.
         /// </summary>
         public readonly InputAction GasBrakeAction;
 
         /// <summary>
         /// Gets the <see cref="InputAction"/> for steering input.
-        /// This action is publicly accessible so the <c>ControlToolSystem</c> can read its current values.
+        /// This action is publicly accessible so the <c>ControlSystem</c> can read its current values.
         /// </summary>
         public readonly InputAction SteerAction;
 
         /// <summary>
         /// Gets the <see cref="InputAction"/> for handbrake input.
-        /// This action is publicly accessible so the <c>ControlToolSystem</c> can read its current values.
+        /// This action is publicly accessible so the <c>ControlSystem</c> can read its current values.
         /// </summary>
         public readonly InputAction HandbrakeAction;
 
@@ -77,18 +77,21 @@ namespace VehicleDriver.Helpers
         /// Gets the current normalized value for gas/brake input.
         /// Positive for gas, negative for brake. Publicly accessible for reading by jobs.
         /// </summary>
+        // ReSharper disable once UnusedAutoPropertyAccessor.Global
         public float GasBrake { get; private set; }
 
         /// <summary>
         /// Gets the current normalized value for steering input.
         /// Negative for the left, positive for the right. Publicly accessible for reading by jobs.
         /// </summary>
+        // ReSharper disable once UnusedAutoPropertyAccessor.Global
         public float Steering { get; private set; }
 
         /// <summary>
         /// Gets a value indicating whether the handbrake is currently active.
         /// Publicly accessible for reading by jobs.
         /// </summary>
+        // ReSharper disable once UnusedAutoPropertyAccessor.Global
         public bool Handbrake { get; private set; }
 
         /// <summary>

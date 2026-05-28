@@ -130,7 +130,7 @@ namespace VehicleDriver.Helpers
             }
 
             // ComponentHelper.SafeRemoveComponent<VehicleDriver.Components.EntityControlData>(entityManager, entity);
-            // It gets updated in OnStopRunning in ControlToolSystem
+            // It gets updated in OnStopRunning in ControlSystem
             // ComponentHelper.SafeAddComponent<Game.Common.Updated>(entityManager, entity);
         }
     }
